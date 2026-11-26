@@ -158,13 +158,17 @@ func (w Workspaces) OfThread(ctx context.Context, thread string) ([]Worktree, er
 	if err != nil {
 		return nil, err
 	}
+	return OwnedBy(all, thread), nil
+}
+
+func OwnedBy(worktrees []Worktree, thread string) []Worktree {
 	var owned []Worktree
-	for _, worktree := range all {
+	for _, worktree := range worktrees {
 		if !worktree.Outside && worktree.Thread == thread {
 			owned = append(owned, worktree)
 		}
 	}
-	return owned, nil
+	return owned
 }
 
 func (w Workspaces) find(ctx context.Context, repositoryName string, thread string) (Worktree, bool, error) {
@@ -172,12 +176,11 @@ func (w Workspaces) find(ctx context.Context, repositoryName string, thread stri
 	if err != nil {
 		return Worktree{}, false, err
 	}
-	for _, worktree := range worktrees {
-		if !worktree.Outside && worktree.Thread == thread {
-			return worktree, true, nil
-		}
+	owned := OwnedBy(worktrees, thread)
+	if len(owned) == 0 {
+		return Worktree{}, false, nil
 	}
-	return Worktree{}, false, nil
+	return owned[0], true, nil
 }
 
 func (w Workspaces) listRepository(ctx context.Context, repositoryName string) ([]Worktree, error) {

@@ -7,4 +7,7 @@ var commands = map[string]handler{
 	"workspace create":  runWorkspaceCreate,
 	"workspace list":    runWorkspaceList,
 	"workspace release": runWorkspaceRelease,
+	"thread create":     runThreadCreate,
+	"thread list":       runThreadList,
+	"thread close":      runThreadClose,
 }
