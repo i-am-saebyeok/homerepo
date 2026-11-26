@@ -16,11 +16,11 @@
 
 ## 3. workspace
 
-- [ ] 3.1 주소로 원격을 찾고 fetch한다
-- [ ] 3.2 `workspace create`를 만든다(clone이 없으면 clone, 이미 있으면 그대로)
-- [ ] 3.3 `workspace list`를 만든다(`git worktree list`에서 읽고 밖의 것을 구분)
-- [ ] 3.4 `workspace release`를 만든다(변경이 있으면 멈춤)
-- [ ] 3.5 임시 저장소로 위 시나리오를 시험한다
+- [x] 3.1 주소로 원격을 찾고 fetch한다
+- [x] 3.2 `workspace create`를 만든다(clone이 없으면 clone, 이미 있으면 그대로)
+- [x] 3.3 `workspace list`를 만든다(`git worktree list`에서 읽고 밖의 것을 구분)
+- [x] 3.4 `workspace release`를 만든다(변경이 있으면 멈춤)
+- [x] 3.5 임시 저장소로 위 시나리오를 시험한다
 
 ## 4. thread
 
