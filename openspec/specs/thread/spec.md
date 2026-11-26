@@ -7,7 +7,7 @@
 ## Requirements
 
 ### Requirement: 스레드 생성
-`homerepo thread create <이름>`은 호출한 세션의 대화를 포크해 Herdr의 새 탭에 띄워야 한다(SHALL). 포크된 세션은 Home에서 시작하고, 선언된 각 저장소의 `<clone>/.worktrees`를 추가 폴더로 받는다. 호출한 세션의 탭에는 입력을 보내지 않으며 포커스를 옮기지 않는다.
+`homerepo thread create <이름>`은 호출한 세션의 대화를 포크해 Herdr의 새 탭에 띄워야 한다(SHALL). 포크된 세션은 Home에서 시작한다. 호출한 세션의 탭에는 입력을 보내지 않으며 포커스를 옮기지 않는다.
 
 #### Scenario: Claude Code 세션에서 만든다
 - **WHEN** Herdr 안의 Claude Code 세션에서 `homerepo thread create login-fix`를 실행한다
@@ -138,7 +138,7 @@
 | --- | --- | --- |
 | `HOMEREPO_HOOK_THREAD` | 스레드의 이름 | 둘 다 |
 | `HOMEREPO_HOOK_RUNTIME` | `claude` 또는 `codex` | 둘 다 |
-| `HOMEREPO_HOOK_DIRS` | 세션에 붙는 추가 폴더의 경로. 한 줄에 하나 | 둘 다 |
+| `HOMEREPO_HOOK_DIRS` | clone이 있거나 `--repo`로 준 저장소의 `<clone>/.worktrees` 경로. 한 줄에 하나 | 둘 다 |
 | `HOMEREPO_HOOK_TAB` | 스레드의 탭 ID | `post-thread-create` |
 | `HOMEREPO_HOOK_PANE` | 포크 명령을 실행한 창의 ID | `post-thread-create` |
 
@@ -154,6 +154,33 @@
 - **WHEN** 선언된 저장소 둘의 clone이 있다
 - **THEN** `HOMEREPO_HOOK_DIRS`는 두 저장소의 `<clone>/.worktrees` 경로를 한 줄에 하나씩 담는다
 
+#### Scenario: 추가 폴더 인자를 붙이지 않는 설정
+- **WHEN** 그 런타임의 `attach`가 `false`다
+- **THEN** `HOMEREPO_HOOK_DIRS`는 `attach`가 없을 때와 같은 경로를 담는다
+
 #### Scenario: 훅의 출력
 - **WHEN** 훅이 표준 출력에 글을 쓴다
 - **THEN** 그 글은 명령의 표준 오류로 나가고, 명령의 표준 출력은 스레드의 이름과 탭을 알리는 한 줄뿐이다
+
+### Requirement: 추가 폴더 붙이기
+시스템은 clone이 있거나 `--repo`로 준 저장소의 `<clone>/.worktrees`를 포크 명령에 추가 폴더 인자로 붙여야 한다(SHALL). `.homerepo/config.yaml`의 `runtimes.<런타임>.attach`가 `false`면 그 런타임의 포크 명령에 추가 폴더 인자를 붙이지 않는다. 이때 세션이 접근할 폴더는 사용자가 런타임의 설정이나 실행 인자의 묶음으로 정한다.
+
+#### Scenario: 설정이 없다
+- **WHEN** 그 런타임에 `attach`가 없거나 `true`다
+- **THEN** 포크 명령에 각 저장소의 `<clone>/.worktrees`가 추가 폴더 인자로 붙는다
+
+#### Scenario: 붙이지 않는다
+- **WHEN** `runtimes.claude.attach`가 `false`이고 Claude Code 세션에서 스레드를 만든다
+- **THEN** 포크 명령에 추가 폴더 인자가 없다
+
+#### Scenario: 런타임마다 따로 정한다
+- **WHEN** `runtimes.claude.attach`가 `false`이고 `runtimes.codex`에는 `attach`가 없다
+- **THEN** Codex 세션에서 만든 스레드의 포크 명령에는 추가 폴더 인자가 붙는다
+
+#### Scenario: 묶음으로 직접 붙인다
+- **WHEN** `attach`가 `false`이고 `default` 묶음이 `["--add-dir", "/work"]`다
+- **THEN** 포크 명령의 추가 폴더 인자는 묶음에 적힌 `--add-dir /work`뿐이다
+
+#### Scenario: 참도 거짓도 아닌 값
+- **WHEN** `attach`에 `true`와 `false`가 아닌 값이 적혀 있다
+- **THEN** 아무것도 만들지 않고 설정 파일의 어느 값이 잘못됐는지 알린다
