@@ -45,7 +45,7 @@
 - **THEN** 탭도 worktree도 기록도 생기지 않고, 이미 `login-fix` 안에 있다는 것과 worktree를 만드는 명령을 알린다
 
 ### Requirement: 세션이 준비되기를 기다리지 않는다
-`thread create`는 탭을 만들고, 그 탭의 창에서 포크 명령을 실행하고, 스레드 기록을 쓰고, 뒤의 훅이 있으면 그 훅이 끝난 뒤 끝나야 한다(SHALL). 세션이 입력을 받을 준비가 되기를 기다리지 않으며, 그 세션에 메시지나 키 입력을 보내지 않는다. 출력은 스레드의 이름과 탭을 알리는 한 줄이다. 포크 명령의 실행 파일 이름과 인자는 각각 따로 넘겨, 빈칸이 든 경로나 인자도 하나의 인자로 남는다. 탭의 셸이 아직 명령을 받지 못해 Herdr가 포크 명령을 거절하면 정해진 시간 안에서 다시 보낸다.
+`thread create`는 탭을 만들고, 그 탭의 창에서 포크 명령을 실행하고, 스레드 기록을 쓰고, 뒤의 훅이 있으면 그 훅이 끝난 뒤 끝나야 한다(SHALL). 세션이 입력을 받을 준비가 되기를 기다리지 않으며, 그 세션에 메시지나 키 입력을 보내지 않는다. 출력의 첫 줄은 스레드의 이름과 탭을 알린다. 포크 명령의 실행 파일 이름과 인자는 각각 따로 넘겨, 빈칸이 든 경로나 인자도 하나의 인자로 남는다. 탭의 셸이 아직 명령을 받지 못해 Herdr가 포크 명령을 거절하면 정해진 시간 안에서 다시 보낸다.
 
 #### Scenario: 띄우고 돌아온다
 - **WHEN** 훅이 없는 Home에서 `homerepo thread create login-fix`를 실행한다
@@ -99,11 +99,15 @@
 - **THEN** 포크 명령의 인자는 이 변경 전과 같다
 
 ### Requirement: 포크와 함께 worktree 만들기
-`thread create`에 `--repo <이름>`을 주면, 시스템은 세션을 띄우기 전에 그 저장소의 worktree를 만들어야 한다(SHALL). 여러 번 줄 수 있다.
+`thread create`에 `--repo <이름>`을 주면, 시스템은 세션을 띄우기 전에 그 저장소의 worktree를 만들어야 한다(SHALL). 여러 번 줄 수 있다. 출력의 첫 줄 다음에, 만든 worktree마다 저장소와 경로를 한 줄씩 출력한다.
 
 #### Scenario: 저장소를 지정한다
 - **WHEN** `homerepo thread create login-fix --repo frontend`를 실행한다
-- **THEN** `frontend`의 clone에 `.worktrees/login-fix`가 생긴 뒤 스레드가 뜬다
+- **THEN** `frontend`의 clone에 `.worktrees/login-fix`가 생긴 뒤 스레드가 뜨고, 출력의 둘째 줄에 `frontend`와 그 worktree의 경로가 나온다
+
+#### Scenario: 저장소를 주지 않는다
+- **WHEN** `--repo` 없이 스레드를 만든다
+- **THEN** 출력은 스레드의 이름과 탭을 알리는 한 줄뿐이다
 
 ### Requirement: 스레드 목록과 닫기
 `homerepo thread list`는 스레드의 이름, 런타임, 탭, worktree를 출력해야 한다(SHALL). `homerepo thread close <이름>`은 그 스레드의 worktree를 해제하고 탭을 닫아야 한다(SHALL). 해제할 수 없는 worktree가 있으면 탭을 닫지 않는다.

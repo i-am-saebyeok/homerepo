@@ -11,4 +11,4 @@
 
 ## 2. 실제로 돌려 보기
 
-- [ ] 2.1 시나리오 시험 `new-repository`를 Claude Code로 돌려 네 확인이 통과하고, 에이전트의 결과 문서에 등록 형식과 worktree 경로로 헤맨 기록이 없는지 본다
+- [x] 2.1 시나리오 시험 `new-repository`를 Claude Code로 돌려 네 확인이 통과하고, 에이전트의 결과 문서에 등록 형식과 worktree 경로로 헤맨 기록이 없는지 본다
