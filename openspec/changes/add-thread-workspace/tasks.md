@@ -8,11 +8,11 @@
 
 ## 2. repository
 
-- [ ] 2.1 `homerepo.yaml`과 `.homerepo/config.yaml`을 읽고 검증한다
-- [ ] 2.2 clone의 자리를 계산한다(기본은 Home 옆, 예외는 로컬 설정)
-- [ ] 2.3 스스로 Git에서 빠지는 폴더를 만드는 함수를 만든다
-- [ ] 2.4 `repo list`, `repo path`를 만든다
-- [ ] 2.5 `init`을 만든다(뼈대 파일과 스킬 설치, 있는 파일은 건너뜀)
+- [x] 2.1 `homerepo.yaml`과 `.homerepo/config.yaml`을 읽고 검증한다
+- [x] 2.2 clone의 자리를 계산한다(기본은 Home 옆, 예외는 로컬 설정)
+- [x] 2.3 스스로 Git에서 빠지는 폴더를 만드는 함수를 만든다
+- [x] 2.4 `repo list`, `repo path`를 만든다
+- [x] 2.5 `init`을 만든다(뼈대 파일과 스킬 설치, 있는 파일은 건너뜀)
 
 ## 3. workspace
 
