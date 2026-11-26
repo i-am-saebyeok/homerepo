@@ -281,3 +281,35 @@ func TestWorkspaceListShowsDeletedWorktreeAsMissing(t *testing.T) {
 		t.Fatalf("stdout:\n%s", got.stdout)
 	}
 }
+
+func (f *fixture) declareEmptyRemote(name string) {
+	f.t.Helper()
+	remote := f.emptyRemote(name)
+	f.writeDeclaration(f.declaration() + "  - name: " + name + "\n    remote: " + remote + "\n    branch: main\n")
+}
+
+func TestWorkspaceCreateWithBranchMissingOnRemote(t *testing.T) {
+	cases := map[string]bool{"clone missing": false, "clone present": true}
+	for name, cloned := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			f.declareEmptyRemote("notes")
+			if cloned {
+				gittest.Git(t, f.root, "clone", "--quiet", filepath.Join(f.root, "remotes", "notes.git"), f.clonePath("notes"))
+			}
+			f.env["HOMEREPO_THREAD"] = "login-fix"
+
+			got := f.run("workspace", "create", "notes")
+
+			if got.code == 0 || !strings.Contains(got.stderr, `branch "main" is not on the remote`) || !strings.Contains(got.stderr, "push a first commit to main") {
+				t.Fatalf("code %d, stderr:\n%s", got.code, got.stderr)
+			}
+			if exists(f.clonePath("notes")) != cloned || exists(f.worktreePath("notes", "login-fix")) {
+				t.Fatal("a clone or worktree was created")
+			}
+			if cloned && exists(filepath.Join(f.clonePath("notes"), ".worktrees")) {
+				t.Fatal("a worktrees folder was created")
+			}
+		})
+	}
+}

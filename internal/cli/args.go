@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"strings"
 )
@@ -17,6 +19,27 @@ func (r *repeated) Set(value string) error {
 	return nil
 }
 
+type usageError struct {
+	message string
+	flags   *flag.FlagSet
+}
+
+func (e usageError) Error() string {
+	return e.message
+}
+
+type helpRequested struct {
+	flags *flag.FlagSet
+}
+
+func (helpRequested) Error() string {
+	return "help requested"
+}
+
+func usageOfFlags(flags *flag.FlagSet, format string, values ...any) error {
+	return usageError{message: flags.Name() + ": " + fmt.Sprintf(format, values...), flags: flags}
+}
+
 func newFlags(name string) *flag.FlagSet {
 	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
@@ -26,8 +49,12 @@ func newFlags(name string) *flag.FlagSet {
 func parse(flags *flag.FlagSet, args []string, positionals int) ([]string, error) {
 	var found []string
 	for {
-		if err := flags.Parse(args); err != nil {
-			return nil, usagef("%s: %s", flags.Name(), err)
+		err := flags.Parse(args)
+		if errors.Is(err, flag.ErrHelp) {
+			return nil, helpRequested{flags: flags}
+		}
+		if err != nil {
+			return nil, usageOfFlags(flags, "%s", err)
 		}
 		if flags.NArg() == 0 {
 			break
@@ -36,7 +63,7 @@ func parse(flags *flag.FlagSet, args []string, positionals int) ([]string, error
 		args = flags.Args()[1:]
 	}
 	if len(found) != positionals {
-		return nil, usagef("%s: expected %d argument(s), got %d", flags.Name(), positionals, len(found))
+		return nil, usageOfFlags(flags, "expected %d argument(s), got %d", positionals, len(found))
 	}
 	return found, nil
 }

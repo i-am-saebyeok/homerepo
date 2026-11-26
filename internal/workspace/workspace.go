@@ -64,18 +64,23 @@ func (w Workspaces) Create(ctx context.Context, repositoryName string, thread st
 		return "", err
 	}
 	clone := w.Home.ClonePath(repositoryName)
+	path := w.threadPath(repositoryName, thread)
+	if home.IsDir(clone) {
+		_, found, err := w.find(ctx, repositoryName, thread)
+		if err != nil {
+			return "", err
+		}
+		if found {
+			return path, nil
+		}
+	}
+	if err := w.requireRemoteBranch(ctx, repository.Remote, repository.Branch); err != nil {
+		return "", fmt.Errorf("%s: %w", repositoryName, err)
+	}
 	if !home.IsDir(clone) {
 		if err := w.cloneRepository(ctx, repository, clone); err != nil {
 			return "", err
 		}
-	}
-	path := w.threadPath(repositoryName, thread)
-	_, found, err := w.find(ctx, repositoryName, thread)
-	if err != nil {
-		return "", err
-	}
-	if found {
-		return path, nil
 	}
 	if _, err := os.Lstat(path); err == nil {
 		return "", fmt.Errorf("%s exists but is not a worktree of %s", path, clone)
