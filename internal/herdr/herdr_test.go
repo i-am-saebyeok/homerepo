@@ -42,3 +42,18 @@ func TestCloseTabIgnoresMissingTab(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAgentTreatsMissingAgentAsAbsent(t *testing.T) {
+	missing := commandtest.Fail(command.Command{Name: "herdr"}, `{"error":{"code":"agent_not_found","message":"gone"}}`)
+	status, err := clientReplying("", missing).Agent(context.Background(), "w1:p2")
+	if err != nil || status != herdr.AgentAbsent {
+		t.Fatalf("status %q, err %v", status, err)
+	}
+}
+
+func TestAgentReadsStatus(t *testing.T) {
+	status, err := clientReplying(`{"result":{"agent":{"agent_status":"blocked","pane_id":"w1:p2"}}}`, nil).Agent(context.Background(), "w1:p2")
+	if err != nil || status != herdr.AgentBlocked {
+		t.Fatalf("status %q, err %v", status, err)
+	}
+}
