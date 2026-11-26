@@ -21,6 +21,8 @@ type fakeHerdr struct {
 	calls       [][]string
 	onTabCreate func()
 	onPaneRun   func()
+	onTabClose  func()
+	splitTabs   map[string]bool
 }
 
 func (f *fixture) useHerdr() *fakeHerdr {
@@ -72,9 +74,14 @@ func (h *fakeHerdr) handle(cmd command.Command) (command.Output, error) {
 			return command.Output{}, herdrError(cmd, "tab_not_found")
 		}
 		if action == "tab close" {
+			if h.onTabClose != nil {
+				h.onTabClose()
+			}
 			delete(h.openTabs, tab)
 		}
-		return reply(`{"result":{}}`)
+		return reply(`{"id":"cli:tab:get","result":{"tab":{"tab_id":"` + tab + `","workspace_id":"w1"}}}`)
+	case "pane list":
+		return reply(h.paneList())
 	}
 	return command.Output{}, fmt.Errorf("unexpected herdr call: %v", cmd.Args)
 }
@@ -539,4 +546,16 @@ func TestThreadCreateKeepsConfiguredBundleUnchanged(t *testing.T) {
 	if got := fake.runtimeArgs(t); !slices.Equal(got, []string{"--resume", "session-1", "--fork-session", "--remote-control", "second"}) {
 		t.Fatalf("second thread args %q", got)
 	}
+}
+
+func (h *fakeHerdr) paneList() string {
+	var panes []string
+	for tab := range h.openTabs {
+		panes = append(panes, `{"pane_id":"`+tab+`:p1","tab_id":"`+tab+`","workspace_id":"w1"}`)
+		if h.splitTabs[tab] {
+			panes = append(panes, `{"pane_id":"`+tab+`:p2","tab_id":"`+tab+`","workspace_id":"w1"}`)
+		}
+	}
+	panes = append(panes, `{"pane_id":"`+callerPane+`","tab_id":"w1:t0","workspace_id":"w1"}`)
+	return `{"id":"cli:pane:list","result":{"panes":[` + strings.Join(panes, ",") + `]}}`
 }

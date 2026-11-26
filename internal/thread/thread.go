@@ -43,7 +43,7 @@ func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, err
 		return Record{}, err
 	}
 	values := hookValues{thread: request.Name, runtime: request.Caller.Runtime, attachDirs: t.attachDirs(request.Repositories)}
-	if err := t.Hooks.beforeCreate(ctx, values); err != nil {
+	if err := t.Hooks.run(ctx, preCreateHook, values); err != nil {
 		return Record{}, err
 	}
 	for _, repository := range request.Repositories {
@@ -70,7 +70,7 @@ func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, err
 	if err := t.Herdr.RunInPane(ctx, tab.Pane, plan.adapter.program, plan.args(request.Caller.Session, values.attachDirs)); err != nil {
 		return record, fmt.Errorf("tab %s was created but the session did not start (close it with `homerepo thread close %s`): %w", tab.ID, request.Name, err)
 	}
-	if err := t.Hooks.afterCreate(ctx, values, tab); err != nil {
+	if err := t.Hooks.run(ctx, postCreateHook, values.inTab(tab.ID, tab.Pane)); err != nil {
 		return record, fmt.Errorf("thread %q was created in tab %s, but %w", request.Name, tab.ID, err)
 	}
 	return record, nil
@@ -147,30 +147,64 @@ func (t Threads) List(ctx context.Context) ([]Summary, error) {
 }
 
 func (t Threads) Close(ctx context.Context, name string) ([]string, error) {
-	record, err := t.Records.Read(name)
+	record, worktrees, err := t.checkClose(ctx, name)
 	if err != nil {
 		return nil, err
 	}
+	values := hookValues{thread: name, runtime: record.Runtime, attachDirs: t.attachDirs(nil), tab: record.TabID}
+	if err := t.runBeforeClose(ctx, values); err != nil {
+		return nil, fmt.Errorf("thread %q was not closed: %w", name, err)
+	}
+	released, err := t.release(ctx, record, worktrees)
+	if err != nil {
+		return released, err
+	}
+	if err := t.Hooks.run(ctx, postCloseHook, values); err != nil {
+		return released, fmt.Errorf("thread %q was closed, but %w", name, err)
+	}
+	return released, nil
+}
+
+func (t Threads) checkClose(ctx context.Context, name string) (Record, []workspace.Worktree, error) {
+	record, err := t.Records.Read(name)
+	if err != nil {
+		return Record{}, nil, err
+	}
 	worktrees, err := t.Workspaces.OfThread(ctx, name)
 	if err != nil {
-		return nil, err
+		return Record{}, nil, err
 	}
 	var problems []error
 	for _, worktree := range worktrees {
 		problems = append(problems, t.Workspaces.CheckClean(ctx, worktree))
 	}
 	if err := errors.Join(problems...); err != nil {
-		return nil, fmt.Errorf("thread %q was not closed; its tab and worktrees are kept:\n%w", name, err)
+		return Record{}, nil, fmt.Errorf("thread %q was not closed; its tab and worktrees are kept:\n%w", name, err)
 	}
+	return record, worktrees, nil
+}
+
+func (t Threads) runBeforeClose(ctx context.Context, values hookValues) error {
+	if !t.Hooks.has(preCloseHook) {
+		return nil
+	}
+	pane, err := t.Herdr.PaneOfTab(ctx, values.tab)
+	if err != nil {
+		return err
+	}
+	return t.Hooks.run(ctx, preCloseHook, values.inTab(values.tab, pane))
+}
+
+func (t Threads) release(ctx context.Context, record Record, worktrees []workspace.Worktree) ([]string, error) {
 	var released []string
 	for _, worktree := range worktrees {
-		path, err := t.Workspaces.Release(ctx, worktree.Repository, name)
+		path, err := t.Workspaces.Release(ctx, worktree.Repository, record.Name)
 		if err != nil {
 			return released, err
 		}
 		released = append(released, path)
 	}
-	if err := t.Records.Delete(name); err != nil {
+	if err := t.Records.Delete(record.Name); err != nil {
 		return released, err
 	}
 	return released, t.Herdr.CloseTab(ctx, record.TabID)
