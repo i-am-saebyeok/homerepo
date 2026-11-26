@@ -204,5 +204,6 @@ func isAgentNameCharacter(character rune) bool {
 
 func FirstMessage(name string) string {
 	return fmt.Sprintf("You are the homerepo thread %q. This session was just forked from another session into its own Herdr tab; continue here with the work that was split off. "+
+		"The thread already exists, so do not run `homerepo thread create` again, even if the conversation ends with that call unfinished. "+
 		"Do code work in a worktree, not in the original clone: run `homerepo workspace create <repository>` and work in the path it prints.", name)
 }
