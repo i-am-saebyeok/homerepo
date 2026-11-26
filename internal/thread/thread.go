@@ -38,7 +38,7 @@ type Summary struct {
 }
 
 func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, error) {
-	adapter, bundle, err := t.checkCreate(request)
+	plan, err := t.checkCreate(request)
 	if err != nil {
 		return Record{}, err
 	}
@@ -67,7 +67,7 @@ func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, err
 	if err := t.Records.Write(record); err != nil {
 		return record, err
 	}
-	if err := t.Herdr.RunInPane(ctx, tab.Pane, adapter.program, launchArgs(adapter, request.Caller.Session, values.attachDirs, bundle)); err != nil {
+	if err := t.Herdr.RunInPane(ctx, tab.Pane, plan.adapter.program, plan.args(request.Caller.Session, values.attachDirs)); err != nil {
 		return record, fmt.Errorf("tab %s was created but the session did not start (close it with `homerepo thread close %s`): %w", tab.ID, request.Name, err)
 	}
 	if err := t.Hooks.afterCreate(ctx, values, tab); err != nil {
@@ -76,24 +76,19 @@ func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, err
 	return record, nil
 }
 
-func (t Threads) checkCreate(request CreateRequest) (runtimeAdapter, []string, error) {
+func (t Threads) checkCreate(request CreateRequest) (launch, error) {
 	if err := workspace.CheckThreadName(request.Name); err != nil {
-		return runtimeAdapter{}, nil, err
+		return launch{}, err
 	}
 	if err := t.checkNameIsFree(request.Name); err != nil {
-		return runtimeAdapter{}, nil, err
+		return launch{}, err
 	}
 	for _, repository := range request.Repositories {
 		if _, err := t.Home.Repository(repository); err != nil {
-			return runtimeAdapter{}, nil, err
+			return launch{}, err
 		}
 	}
-	adapter, err := adapterFor(request.Caller.Runtime)
-	if err != nil {
-		return runtimeAdapter{}, nil, err
-	}
-	bundle, err := argumentBundle(t.Home.Local, request.Caller.Runtime, request.Mode)
-	return adapter, withThreadName(bundle, request.Name), err
+	return prepareLaunch(t.Home.Local, request)
 }
 
 func (t Threads) checkNameIsFree(name string) error {

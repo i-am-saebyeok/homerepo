@@ -227,3 +227,25 @@ func TestInitLocalFolderStaysOutOfGitStatus(t *testing.T) {
 		t.Fatalf("declaration should be visible to commit:\n%s", status)
 	}
 }
+
+func TestRuntimeAttachDistinguishesUnsetFromFalse(t *testing.T) {
+	root := newHome(t, declared)
+	gittest.WriteFile(t, filepath.Join(root, home.LocalDir, home.LocalConfigFile), "runtimes:\n  claude:\n    attach: false\n  codex:\n    attach: True\n  other:\n    thread:\n      default: []\n")
+	loaded, err := home.Load(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimes := loaded.Local.Runtimes
+	if runtimes["claude"].AttachesWorktrees() || !runtimes["codex"].AttachesWorktrees() || !runtimes["other"].AttachesWorktrees() || !runtimes["missing"].AttachesWorktrees() {
+		t.Fatalf("attach values %+v", runtimes)
+	}
+}
+
+func TestRuntimeAttachRejectsOtherValues(t *testing.T) {
+	root := newHome(t, declared)
+	gittest.WriteFile(t, filepath.Join(root, home.LocalDir, home.LocalConfigFile), "runtimes:\n  claude:\n    attach: yes\n")
+	_, err := home.Load(root)
+	if err == nil || !strings.Contains(err.Error(), `line 3: expected true or false, got "yes"`) {
+		t.Fatalf("error %v", err)
+	}
+}
