@@ -19,7 +19,7 @@ func (app App) threads() (thread.Threads, error) {
 	return thread.Threads{
 		Home:       loaded,
 		Workspaces: workspace.Workspaces{Home: loaded, Runner: app.Runner},
-		Herdr:      herdr.Client{Runner: app.Runner, Sleep: app.Sleep},
+		Herdr:      herdr.Client{Runner: app.Runner},
 		Records:    thread.Records{HomeRoot: loaded.Root},
 		Now:        app.Now,
 	}, nil
@@ -44,19 +44,11 @@ func runThreadCreate(ctx context.Context, app App, args []string) error {
 	if err != nil {
 		return err
 	}
-	created, err := threads.Create(ctx, thread.CreateRequest{Name: positionals[0], Repositories: repositories, Mode: *mode, Caller: caller})
-	for _, path := range created.Worktrees {
-		app.println("worktree", path)
-	}
+	record, err := threads.Create(ctx, thread.CreateRequest{Name: positionals[0], Repositories: repositories, Mode: *mode, Caller: caller})
 	if err != nil {
 		return err
 	}
-	app.println("created thread", created.Record.Name, "in tab", created.Record.TabID)
-	if created.Readiness == herdr.Ready {
-		app.println("sent the first message")
-		return nil
-	}
-	app.println("the session in tab", created.Record.TabID, "is waiting for a confirmation; answer it in that tab. The first message was not sent.")
+	app.println("created thread", record.Name, "in tab", record.TabID)
 	return nil
 }
 

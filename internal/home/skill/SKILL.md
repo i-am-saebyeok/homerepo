@@ -16,4 +16,8 @@ Use `homerepo` to split work into threads (forked sessions in new Herdr tabs) an
 - `homerepo repo list`
 - `homerepo repo path <repository>`
 
+Before `thread create`, write in one or two lines what the thread should do; the fork takes the conversation with it. Afterwards, tell the user the tab's name: the thread starts when the user talks to it in that tab.
+
+If `HOMEREPO_THREAD` is set, you are inside that thread. Do not create threads; work in the path `homerepo workspace create` prints.
+
 Do code work in a worktree.

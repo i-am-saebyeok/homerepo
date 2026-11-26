@@ -1,30 +1,12 @@
 package thread
 
 import (
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/i-am-saebyeok/homerepo/internal/home"
 )
-
-var herdrAgentName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
-
-func TestAgentNameFitsHerdr(t *testing.T) {
-	cases := map[string]string{
-		"login-fix":             "login-fix",
-		"fix/Login.Page":        "fix-login-page",
-		"2026-cleanup":          "thread-2026-cleanup",
-		strings.Repeat("a", 40): strings.Repeat("a", 32),
-	}
-	for thread, want := range cases {
-		got := AgentName(thread)
-		if got != want || !herdrAgentName.MatchString(got) {
-			t.Errorf("AgentName(%q) = %q, want %q", thread, got, want)
-		}
-	}
-}
 
 func environment(values map[string]string) func(string) string {
 	return func(key string) string { return values[key] }

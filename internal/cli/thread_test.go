@@ -11,7 +11,6 @@ import (
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 	"github.com/i-am-saebyeok/homerepo/internal/command/commandtest"
 	"github.com/i-am-saebyeok/homerepo/internal/gittest"
-	"github.com/i-am-saebyeok/homerepo/internal/herdr"
 )
 
 const callerPane = "w1:p0"
@@ -19,7 +18,6 @@ const callerPane = "w1:p0"
 type fakeHerdr struct {
 	openTabs    map[string]bool
 	createdTabs int
-	startCodes  []string
 	calls       [][]string
 	onTabCreate func()
 }
@@ -62,15 +60,8 @@ func (h *fakeHerdr) handle(cmd command.Command) (command.Output, error) {
 		tab := fmt.Sprintf("w1:t%d", h.createdTabs)
 		h.openTabs[tab] = true
 		return reply(`{"id":"cli:tab:create","result":{"tab":{"tab_id":"` + tab + `"},"root_pane":{"pane_id":"` + tab + `:p1"}}}`)
-	case "agent start":
-		if len(h.startCodes) > 0 {
-			code := h.startCodes[0]
-			h.startCodes = h.startCodes[1:]
-			return command.Output{}, herdrError(cmd, code)
-		}
-		return reply(`{"id":"cli:agent:start","result":{}}`)
-	case "agent prompt":
-		return reply(`{"id":"cli:agent:prompt","result":{}}`)
+	case "pane run":
+		return reply(`{"id":"cli:pane:run","result":{}}`)
 	case "tab get", "tab close":
 		tab := cmd.Args[2]
 		if !h.openTabs[tab] {
@@ -94,14 +85,18 @@ func (h *fakeHerdr) callsOf(action string) [][]string {
 	return found
 }
 
-func (h *fakeHerdr) agentArgs(t *testing.T) []string {
+func (h *fakeHerdr) runtimeCommand(t *testing.T) []string {
 	t.Helper()
-	starts := h.callsOf("agent start")
-	if len(starts) == 0 {
-		t.Fatal("no agent was started")
+	runs := h.callsOf("pane run")
+	if len(runs) == 0 {
+		t.Fatal("no session was started")
 	}
-	last := starts[len(starts)-1]
-	return last[slices.Index(last, "--")+1:]
+	return runs[len(runs)-1][3:]
+}
+
+func (h *fakeHerdr) runtimeArgs(t *testing.T) []string {
+	t.Helper()
+	return h.runtimeCommand(t)[1:]
 }
 
 func (f *fixture) recordPath(name string) string {
@@ -119,15 +114,15 @@ func TestThreadCreateFromClaudeSession(t *testing.T) {
 	frontendWorktrees := filepath.Join(f.clonePath("frontend"), ".worktrees")
 	wantCalls := [][]string{
 		{"tab", "create", "--workspace", "w1", "--cwd", f.home, "--label", "login-fix", "--env", "HOMEREPO_THREAD=login-fix", "--no-focus"},
-		{"agent", "start", "login-fix", "--kind", "claude", "--pane", "w1:t1:p1", "--timeout", "60000", "--", "--resume", "session-1", "--fork-session", "--add-dir", frontendWorktrees},
+		{"pane", "run", "w1:t1:p1", "claude", "--resume", "session-1", "--fork-session", "--add-dir", frontendWorktrees},
+	}
+	if len(fake.calls) != len(wantCalls) {
+		t.Fatalf("herdr calls %q, want %q", fake.calls, wantCalls)
 	}
 	for index, want := range wantCalls {
 		if !slices.Equal(fake.calls[index], want) {
 			t.Fatalf("call %d:\n got %q\nwant %q", index, fake.calls[index], want)
 		}
-	}
-	if len(fake.callsOf("agent prompt")) != 1 {
-		t.Fatalf("first message was not sent once: %q", fake.calls)
 	}
 	for _, call := range fake.calls {
 		if slices.Contains(call, callerPane) || slices.Contains(call, "--focus") || call[1] == "focus" {
@@ -149,7 +144,7 @@ func TestThreadCreateFromClaudeSession(t *testing.T) {
 			t.Fatalf("record misses %s:\n%s", expected, record)
 		}
 	}
-	if !strings.Contains(got.stdout, "created thread login-fix in tab w1:t1") {
+	if got.stdout != "created thread login-fix in tab w1:t1\n" {
 		t.Fatalf("stdout:\n%s", got.stdout)
 	}
 }
@@ -158,17 +153,36 @@ func TestThreadCreateFromCodexSession(t *testing.T) {
 	f := newFixture(t)
 	f.clone("frontend")
 	fake := f.useHerdr()
+	f.env["CODEX_SESSION_ID"] = "codex-session-9"
+	f.env["CODEX_THREAD_ID"] = "codex-session-9"
 	f.enterHerdr()
 
-	f.mustRun("thread", "create", "login-fix", "--runtime", "codex", "--session", "codex-session-9")
+	f.mustRun("thread", "create", "login-fix")
 
-	start := fake.callsOf("agent start")[0]
-	if start[slices.Index(start, "--kind")+1] != "codex" {
-		t.Fatalf("kind is not codex: %q", start)
+	want := []string{"codex", "fork", "codex-session-9", "--add-dir", filepath.Join(f.clonePath("frontend"), ".worktrees")}
+	if got := fake.runtimeCommand(t); !slices.Equal(got, want) {
+		t.Fatalf("runtime command %q, want %q", got, want)
 	}
-	want := []string{"fork", "codex-session-9", "--add-dir", filepath.Join(f.clonePath("frontend"), ".worktrees")}
-	if got := fake.agentArgs(t); !slices.Equal(got, want) {
-		t.Fatalf("runtime args %q, want %q", got, want)
+}
+
+func TestThreadCreateOverridesRuntimeAndSession(t *testing.T) {
+	f := newFixture(t)
+	fake := f.useHerdr()
+	f.enterClaudeSession()
+	f.mustRun("thread", "create", "login-fix", "--runtime", "codex", "--session", "codex-session-9")
+	if got := fake.runtimeCommand(t); !slices.Equal(got, []string{"codex", "fork", "codex-session-9"}) {
+		t.Fatalf("runtime command %q", got)
+	}
+}
+
+func TestThreadCreateWithBothRuntimesAsksForRuntime(t *testing.T) {
+	f := newFixture(t)
+	fake := f.useHerdr()
+	f.enterClaudeSession()
+	f.env["CODEX_SESSION_ID"] = "codex-session-9"
+	got := f.run("thread", "create", "login-fix")
+	if got.code == 0 || !strings.Contains(got.stderr, "--runtime") || len(fake.calls) != 0 {
+		t.Fatalf("code %d, calls %q, stderr:\n%s", got.code, fake.calls, got.stderr)
 	}
 }
 
@@ -235,84 +249,6 @@ func TestThreadCreateWithExistingNameCreatesNothing(t *testing.T) {
 	}
 }
 
-func TestThreadFirstMessageNamesThreadAndWorktreeCommand(t *testing.T) {
-	f := newFixture(t)
-	fake := f.useHerdr()
-	f.enterClaudeSession()
-	f.mustRun("thread", "create", "fix/login")
-
-	prompts := fake.callsOf("agent prompt")
-	if len(prompts) != 1 {
-		t.Fatalf("prompts %q", prompts)
-	}
-	if prompts[0][2] != "fix-login" {
-		t.Fatalf("prompt went to agent %q", prompts[0][2])
-	}
-	message := prompts[0][3]
-	for _, expected := range []string{"thread", `"fix/login"`, "worktree", "homerepo workspace create"} {
-		if !strings.Contains(message, expected) {
-			t.Fatalf("first message misses %q: %s", expected, message)
-		}
-	}
-	promptIndex := slices.IndexFunc(fake.calls, func(call []string) bool { return call[1] == "prompt" })
-	startIndex := slices.IndexFunc(fake.calls, func(call []string) bool { return call[1] == "start" })
-	if promptIndex < startIndex {
-		t.Fatal("the first message was sent before the agent was ready")
-	}
-}
-
-func TestThreadCreateWaitingForConfirmationSendsNoMessage(t *testing.T) {
-	f := newFixture(t)
-	fake := f.useHerdr()
-	fake.startCodes = []string{"agent_not_ready"}
-	f.enterClaudeSession()
-
-	got := f.mustRun("thread", "create", "login-fix")
-
-	if len(fake.callsOf("agent prompt")) != 0 {
-		t.Fatal("a message was sent to a session waiting for confirmation")
-	}
-	for _, call := range fake.calls {
-		if call[1] == "send-keys" {
-			t.Fatalf("keys were sent: %q", call)
-		}
-	}
-	if !strings.Contains(got.stdout, "waiting for a confirmation; answer it in that tab") {
-		t.Fatalf("stdout:\n%s", got.stdout)
-	}
-}
-
-func TestThreadCreateRetriesBusyPane(t *testing.T) {
-	f := newFixture(t)
-	fake := f.useHerdr()
-	fake.startCodes = []string{"agent_pane_busy", "agent_pane_busy"}
-	f.enterClaudeSession()
-
-	f.mustRun("thread", "create", "login-fix")
-
-	if len(fake.callsOf("agent start")) != 3 || len(fake.callsOf("agent prompt")) != 1 {
-		t.Fatalf("calls %q", fake.calls)
-	}
-}
-
-func TestThreadCreateGivesUpOnBusyPane(t *testing.T) {
-	f := newFixture(t)
-	fake := f.useHerdr()
-	for range herdr.BusyAttempts {
-		fake.startCodes = append(fake.startCodes, "agent_pane_busy")
-	}
-	f.enterClaudeSession()
-
-	got := f.run("thread", "create", "login-fix")
-
-	if got.code == 0 || !strings.Contains(got.stderr, "agent_pane_busy") || !strings.Contains(got.stderr, "homerepo thread close login-fix") {
-		t.Fatalf("code %d, stderr:\n%s", got.code, got.stderr)
-	}
-	if len(fake.callsOf("agent start")) != herdr.BusyAttempts {
-		t.Fatalf("started %d times", len(fake.callsOf("agent start")))
-	}
-}
-
 func TestThreadCreateUsesArgumentBundles(t *testing.T) {
 	f := newFixture(t)
 	f.writeLocalConfig("runtimes:\n  claude:\n    thread:\n      default: [--model, opus]\n      yolo: [--dangerously-skip-permissions]\n")
@@ -320,12 +256,12 @@ func TestThreadCreateUsesArgumentBundles(t *testing.T) {
 	f.enterClaudeSession()
 
 	f.mustRun("thread", "create", "with-default")
-	if args := fake.agentArgs(t); !slices.Equal(args[len(args)-2:], []string{"--model", "opus"}) {
+	if args := fake.runtimeArgs(t); !slices.Equal(args[len(args)-2:], []string{"--model", "opus"}) {
 		t.Fatalf("default bundle missing: %q", args)
 	}
 
 	f.mustRun("thread", "create", "with-yolo", "--mode", "yolo")
-	args := fake.agentArgs(t)
+	args := fake.runtimeArgs(t)
 	if args[len(args)-1] != "--dangerously-skip-permissions" || slices.Contains(args, "opus") {
 		t.Fatalf("yolo bundle not used alone: %q", args)
 	}
@@ -367,13 +303,13 @@ func TestThreadCreateWithRepositoriesMakesWorktreesFirst(t *testing.T) {
 	if branch := strings.TrimSpace(gittest.Git(t, f.worktreePath("backend", "login-fix"), "branch", "--show-current")); branch != "login-fix" {
 		t.Fatalf("branch %q", branch)
 	}
-	args := fake.agentArgs(t)
+	args := fake.runtimeArgs(t)
 	for _, repository := range []string{"frontend", "backend"} {
 		if !slices.Contains(args, filepath.Join(f.clonePath(repository), ".worktrees")) {
 			t.Fatalf("%s worktrees folder not attached: %q", repository, args)
 		}
 	}
-	if !strings.Contains(got.stdout, "worktree "+f.worktreePath("backend", "login-fix")) {
+	if got.stdout != "created thread login-fix in tab w1:t1\n" {
 		t.Fatalf("stdout:\n%s", got.stdout)
 	}
 }
@@ -473,5 +409,78 @@ func TestThreadCloseUnknownThread(t *testing.T) {
 	f.useHerdr()
 	if got := f.run("thread", "close", "nothing"); got.code == 0 || !strings.Contains(got.stderr, "no thread named") {
 		t.Fatalf("code %d, stderr:\n%s", got.code, got.stderr)
+	}
+}
+
+func TestThreadCreateDoesNotWaitForTheSession(t *testing.T) {
+	f := newFixture(t)
+	fake := f.useHerdr()
+	f.enterClaudeSession()
+
+	f.mustRun("thread", "create", "login-fix")
+
+	for _, call := range fake.calls {
+		if call[0] == "agent" || call[0] == "wait" {
+			t.Fatalf("waited for or talked to the session: %q", call)
+		}
+	}
+	if len(fake.callsOf("pane run")) != 1 || !exists(f.recordPath("login-fix")) {
+		t.Fatalf("session was not started once or no record was written: %q", fake.calls)
+	}
+}
+
+func TestThreadCreateKeepsArgumentsWithSpacesWhole(t *testing.T) {
+	f := newFixture(t)
+	spaced := filepath.Join(t.TempDir(), "with space", "frontend")
+	gittest.Git(t, f.root, "clone", "--quiet", f.remotes["frontend"], spaced)
+	f.writeLocalConfig("repositories:\n  overrides:\n    frontend: " + spaced + "\nruntimes:\n  claude:\n    thread:\n      default: [--append-system-prompt, \"two words\"]\n")
+	fake := f.useHerdr()
+	f.enterClaudeSession()
+
+	f.mustRun("thread", "create", "login-fix")
+
+	args := fake.runtimeArgs(t)
+	if !slices.Contains(args, filepath.Join(spaced, ".worktrees")) || args[len(args)-1] != "two words" {
+		t.Fatalf("arguments were split: %q", args)
+	}
+}
+
+func TestThreadCreateInsideThreadCreatesNothing(t *testing.T) {
+	f := newFixture(t)
+	fake := f.useHerdr()
+	f.enterClaudeSession()
+	f.env["HOMEREPO_THREAD"] = "login-fix"
+
+	got := f.run("thread", "create", "login-fix", "--repo", "frontend")
+
+	if got.code == 0 || !strings.Contains(got.stderr, `already inside thread "login-fix"`) || !strings.Contains(got.stderr, "homerepo workspace create <repository>") {
+		t.Fatalf("code %d, stderr:\n%s", got.code, got.stderr)
+	}
+	if len(fake.calls) != 0 || exists(f.clonePath("frontend")) || exists(f.recordPath("login-fix")) {
+		t.Fatal("something was created")
+	}
+}
+
+func TestThreadCreateRejectsNamesThatOverlapInGit(t *testing.T) {
+	cases := map[string][2]string{
+		"new name inside existing": {"fix", "fix/login"},
+		"existing inside new name": {"fix/login", "fix"},
+	}
+	for name, names := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			fake := f.useHerdr()
+			f.enterClaudeSession()
+			f.mustRun("thread", "create", names[0])
+
+			got := f.run("thread", "create", names[1], "--repo", "frontend")
+
+			if got.code == 0 || !strings.Contains(got.stderr, "conflicts with thread") {
+				t.Fatalf("code %d, stderr:\n%s", got.code, got.stderr)
+			}
+			if len(fake.callsOf("tab create")) != 1 || exists(f.clonePath("frontend")) {
+				t.Fatal("something was created for the second thread")
+			}
+		})
 	}
 }

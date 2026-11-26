@@ -35,14 +35,6 @@ func (r Records) path(name string) string {
 	return filepath.Join(r.dir(), filepath.FromSlash(name)+recordExtension)
 }
 
-func (r Records) Exists(name string) (bool, error) {
-	_, err := os.Stat(r.path(name))
-	if errors.Is(err, fs.ErrNotExist) {
-		return false, nil
-	}
-	return err == nil, err
-}
-
 func (r Records) Write(record Record) error {
 	if _, err := home.EnsureIgnoredDir(filepath.Join(r.HomeRoot, home.LocalDir)); err != nil {
 		return err

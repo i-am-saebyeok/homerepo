@@ -23,7 +23,6 @@ type App struct {
 	Getenv func(string) string
 	Getwd  func() (string, error)
 	Runner command.Runner
-	Sleep  func(time.Duration)
 	Now    func() time.Time
 }
 

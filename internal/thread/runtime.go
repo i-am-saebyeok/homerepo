@@ -17,22 +17,27 @@ const (
 )
 
 type runtimeAdapter struct {
-	runtime          Runtime
-	presenceVariable string
-	sessionVariable  string
-	fork             func(session string) []string
+	runtime         Runtime
+	program         string
+	sessionVariable string
+	present         func(getenv func(string) string) bool
+	fork            func(session string) []string
 }
 
 var runtimeAdapters = []runtimeAdapter{
 	{
-		runtime:          Claude,
-		presenceVariable: "CLAUDECODE",
-		sessionVariable:  "CLAUDE_CODE_SESSION_ID",
-		fork:             func(session string) []string { return []string{"--resume", session, "--fork-session"} },
+		runtime:         Claude,
+		program:         "claude",
+		sessionVariable: "CLAUDE_CODE_SESSION_ID",
+		present:         func(getenv func(string) string) bool { return getenv("CLAUDECODE") == "1" },
+		fork:            func(session string) []string { return []string{"--resume", session, "--fork-session"} },
 	},
 	{
-		runtime: Codex,
-		fork:    func(session string) []string { return []string{"fork", session} },
+		runtime:         Codex,
+		program:         "codex",
+		sessionVariable: "CODEX_SESSION_ID",
+		present:         func(getenv func(string) string) bool { return getenv("CODEX_SESSION_ID") != "" },
+		fork:            func(session string) []string { return []string{"fork", session} },
 	},
 }
 
@@ -49,6 +54,9 @@ type CallerOverrides struct {
 }
 
 func DetectCaller(getenv func(string) string, overrides CallerOverrides) (Caller, error) {
+	if current := getenv(EnvironmentVariable); current != "" {
+		return Caller{}, fmt.Errorf("already inside thread %q, so no thread was created; run `homerepo workspace create <repository>` and work in the path it prints", current)
+	}
 	var problems []error
 	var caller Caller
 	adapter, err := detectRuntime(getenv, overrides.Runtime)
@@ -68,20 +76,24 @@ func detectRuntime(getenv func(string) string, override string) (runtimeAdapter,
 	if override != "" {
 		return adapterFor(Runtime(override))
 	}
+	var present []runtimeAdapter
 	for _, adapter := range runtimeAdapters {
-		if adapter.presenceVariable != "" && getenv(adapter.presenceVariable) == "1" {
-			return adapter, nil
+		if adapter.present(getenv) {
+			present = append(present, adapter)
 		}
 	}
-	return runtimeAdapter{}, errors.New("runtime not found: this is not a Claude Code session (CLAUDECODE is not 1); pass --runtime " + runtimeNames())
+	if len(present) == 1 {
+		return present[0], nil
+	}
+	if len(present) > 1 {
+		return runtimeAdapter{}, errors.New("runtime is ambiguous: both CLAUDECODE=1 and CODEX_SESSION_ID are set; pass --runtime " + runtimeNames())
+	}
+	return runtimeAdapter{}, errors.New("runtime not found: neither CLAUDECODE=1 nor CODEX_SESSION_ID is set; pass --runtime " + runtimeNames())
 }
 
 func detectSession(getenv func(string) string, adapter runtimeAdapter, override string) (string, error) {
 	if override != "" {
 		return override, nil
-	}
-	if adapter.sessionVariable == "" {
-		return "", fmt.Errorf("session ID not found: pass --session <id> for %s", adapter.runtime)
 	}
 	if session := getenv(adapter.sessionVariable); session != "" {
 		return session, nil

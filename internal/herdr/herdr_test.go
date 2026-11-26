@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 	"github.com/i-am-saebyeok/homerepo/internal/command/commandtest"
@@ -17,7 +16,7 @@ func clientReplying(stdout string, err error) herdr.Client {
 			return command.Output{Stdout: []byte(stdout)}, err
 		},
 	}}
-	return herdr.Client{Runner: runner, Sleep: func(_ time.Duration) {}}
+	return herdr.Client{Runner: runner}
 }
 
 func TestErrorCodeReadsHerdrErrorResponse(t *testing.T) {
@@ -41,12 +40,5 @@ func TestCloseTabIgnoresMissingTab(t *testing.T) {
 	missing := commandtest.Fail(command.Command{Name: "herdr"}, `{"error":{"code":"tab_not_found","message":"gone"}}`)
 	if err := clientReplying("", missing).CloseTab(context.Background(), "w1:t9"); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestStartAgentFailsOnOtherErrors(t *testing.T) {
-	failure := commandtest.Fail(command.Command{Name: "herdr"}, `{"error":{"code":"pane_not_found","message":"gone"}}`)
-	if _, err := clientReplying("", failure).StartAgent(context.Background(), herdr.AgentRequest{Name: "a", Kind: "claude", Pane: "p"}); err == nil {
-		t.Fatal("expected an error")
 	}
 }

@@ -60,7 +60,6 @@ func (f *fixture) run(args ...string) result {
 		Getenv: func(key string) string { return f.env[key] },
 		Getwd:  func() (string, error) { return f.cwd, nil },
 		Runner: f.runner,
-		Sleep:  func(time.Duration) {},
 		Now:    func() time.Time { return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC) },
 	}
 	code := app.Run(context.Background(), args)

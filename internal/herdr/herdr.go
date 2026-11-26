@@ -5,27 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 )
 
-const (
-	BusyAttempts       = 10
-	busyWait           = 500 * time.Millisecond
-	readyTimeoutMillis = "60000"
-)
-
-type Readiness string
-
-const (
-	Ready             Readiness = "ready"
-	NeedsConfirmation Readiness = "needs confirmation"
-)
-
 type Client struct {
 	Runner command.Runner
-	Sleep  func(time.Duration)
 }
 
 type Tab struct {
@@ -38,13 +23,6 @@ type TabRequest struct {
 	Cwd         string
 	Label       string
 	Environment []string
-}
-
-type AgentRequest struct {
-	Name string
-	Kind string
-	Pane string
-	Args []string
 }
 
 func (c Client) CreateTab(ctx context.Context, request TabRequest) (Tab, error) {
@@ -75,26 +53,8 @@ func (c Client) CreateTab(ctx context.Context, request TabRequest) (Tab, error) 
 	return Tab{ID: response.Result.Tab.TabID, Pane: response.Result.RootPane.PaneID}, nil
 }
 
-func (c Client) StartAgent(ctx context.Context, request AgentRequest) (Readiness, error) {
-	args := append([]string{"agent", "start", request.Name, "--kind", request.Kind, "--pane", request.Pane, "--timeout", readyTimeoutMillis, "--"}, request.Args...)
-	for attempt := 1; ; attempt++ {
-		_, err := c.run(ctx, args...)
-		code := ErrorCode(err)
-		switch {
-		case err == nil:
-			return Ready, nil
-		case code == "agent_not_ready":
-			return NeedsConfirmation, nil
-		case code == "agent_pane_busy" && attempt < BusyAttempts:
-			c.Sleep(busyWait)
-		default:
-			return "", err
-		}
-	}
-}
-
-func (c Client) Prompt(ctx context.Context, agent string, text string) error {
-	_, err := c.run(ctx, "agent", "prompt", agent, text)
+func (c Client) RunInPane(ctx context.Context, pane string, program string, args []string) error {
+	_, err := c.run(ctx, append([]string{"pane", "run", pane, program}, args...)...)
 	return err
 }
 

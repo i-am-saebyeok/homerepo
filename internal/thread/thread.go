@@ -12,10 +12,7 @@ import (
 	"github.com/i-am-saebyeok/homerepo/internal/workspace"
 )
 
-const (
-	EnvironmentVariable = "HOMEREPO_THREAD"
-	agentNameLimit      = 32
-)
+const EnvironmentVariable = "HOMEREPO_THREAD"
 
 type Threads struct {
 	Home       home.Home
@@ -32,34 +29,25 @@ type CreateRequest struct {
 	Caller       Caller
 }
 
-type Created struct {
-	Record    Record
-	Worktrees []string
-	Readiness herdr.Readiness
-}
-
 type Summary struct {
 	Record    Record
 	TabOpen   bool
 	Worktrees []workspace.Worktree
 }
 
-func (t Threads) Create(ctx context.Context, request CreateRequest) (Created, error) {
+func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, error) {
 	adapter, bundle, err := t.checkCreate(request)
 	if err != nil {
-		return Created{}, err
+		return Record{}, err
 	}
-	var created Created
 	for _, repository := range request.Repositories {
-		path, err := t.Workspaces.Create(ctx, repository, request.Name)
-		if err != nil {
-			return created, err
+		if _, err := t.Workspaces.Create(ctx, repository, request.Name); err != nil {
+			return Record{}, err
 		}
-		created.Worktrees = append(created.Worktrees, path)
 	}
 	attachDirs, err := t.attachDirs()
 	if err != nil {
-		return created, err
+		return Record{}, err
 	}
 	tab, err := t.Herdr.CreateTab(ctx, herdr.TabRequest{
 		Workspace:   request.Caller.Workspace,
@@ -68,38 +56,24 @@ func (t Threads) Create(ctx context.Context, request CreateRequest) (Created, er
 		Environment: []string{EnvironmentVariable + "=" + request.Name},
 	})
 	if err != nil {
-		return created, err
+		return Record{}, err
 	}
-	created.Record = Record{Name: request.Name, Runtime: request.Caller.Runtime, TabID: tab.ID, CreatedAt: t.Now().UTC()}
-	if err := t.Records.Write(created.Record); err != nil {
-		return created, err
+	record := Record{Name: request.Name, Runtime: request.Caller.Runtime, TabID: tab.ID, CreatedAt: t.Now().UTC()}
+	if err := t.Records.Write(record); err != nil {
+		return record, err
 	}
-	agent := AgentName(request.Name)
-	created.Readiness, err = t.Herdr.StartAgent(ctx, herdr.AgentRequest{
-		Name: agent,
-		Kind: string(request.Caller.Runtime),
-		Pane: tab.Pane,
-		Args: launchArgs(adapter, request.Caller.Session, attachDirs, bundle),
-	})
-	if err != nil {
-		return created, fmt.Errorf("tab %s was created but the agent did not start (close it with `homerepo thread close %s`): %w", tab.ID, request.Name, err)
+	if err := t.Herdr.RunInPane(ctx, tab.Pane, adapter.program, launchArgs(adapter, request.Caller.Session, attachDirs, bundle)); err != nil {
+		return record, fmt.Errorf("tab %s was created but the session did not start (close it with `homerepo thread close %s`): %w", tab.ID, request.Name, err)
 	}
-	if created.Readiness != herdr.Ready {
-		return created, nil
-	}
-	return created, t.Herdr.Prompt(ctx, agent, FirstMessage(request.Name))
+	return record, nil
 }
 
 func (t Threads) checkCreate(request CreateRequest) (runtimeAdapter, []string, error) {
 	if err := workspace.CheckThreadName(request.Name); err != nil {
 		return runtimeAdapter{}, nil, err
 	}
-	exists, err := t.Records.Exists(request.Name)
-	if err != nil {
+	if err := t.checkNameIsFree(request.Name); err != nil {
 		return runtimeAdapter{}, nil, err
-	}
-	if exists {
-		return runtimeAdapter{}, nil, fmt.Errorf("thread %q already exists", request.Name)
 	}
 	for _, repository := range request.Repositories {
 		if _, err := t.Home.Repository(repository); err != nil {
@@ -112,6 +86,22 @@ func (t Threads) checkCreate(request CreateRequest) (runtimeAdapter, []string, e
 	}
 	bundle, err := argumentBundle(t.Home.Local, request.Caller.Runtime, request.Mode)
 	return adapter, bundle, err
+}
+
+func (t Threads) checkNameIsFree(name string) error {
+	records, err := t.Records.List()
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if record.Name == name {
+			return fmt.Errorf("thread %q already exists", name)
+		}
+		if strings.HasPrefix(name, record.Name+"/") || strings.HasPrefix(record.Name, name+"/") {
+			return fmt.Errorf("thread %q conflicts with thread %q: Git cannot keep a branch and another branch inside its name", name, record.Name)
+		}
+	}
+	return nil
 }
 
 func (t Threads) attachDirs() ([]string, error) {
@@ -177,33 +167,4 @@ func (t Threads) Close(ctx context.Context, name string) ([]string, error) {
 		return released, err
 	}
 	return released, t.Herdr.CloseTab(ctx, record.TabID)
-}
-
-func AgentName(thread string) string {
-	var name strings.Builder
-	for _, character := range strings.ToLower(thread) {
-		if isAgentNameCharacter(character) {
-			name.WriteRune(character)
-		} else {
-			name.WriteRune('-')
-		}
-	}
-	result := name.String()
-	if result == "" || result[0] < 'a' || result[0] > 'z' {
-		result = "thread-" + result
-	}
-	if len(result) > agentNameLimit {
-		result = result[:agentNameLimit]
-	}
-	return result
-}
-
-func isAgentNameCharacter(character rune) bool {
-	return (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') || character == '_' || character == '-'
-}
-
-func FirstMessage(name string) string {
-	return fmt.Sprintf("You are the homerepo thread %q. This session was just forked from another session into its own Herdr tab; continue here with the work that was split off. "+
-		"The thread already exists, so do not run `homerepo thread create` again, even if the conversation ends with that call unfinished. "+
-		"Do code work in a worktree, not in the original clone: run `homerepo workspace create <repository>` and work in the path it prints.", name)
 }
