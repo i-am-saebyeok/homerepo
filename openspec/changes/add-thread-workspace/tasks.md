@@ -24,10 +24,10 @@
 
 ## 4. thread
 
-- [x] 4.1 환경에서 런타임, 세션 ID, Herdr의 창을 읽는다 (Codex의 환경 변수는 확인 필요: 지금은 `--runtime codex --session <ID>`로 받는다)
+- [x] 4.1 환경에서 런타임, 세션 ID, Herdr의 창을 읽는다(`CLAUDECODE`, `CODEX_SESSION_ID`, 둘 다 있으면 `--runtime`을 요구)
 - [x] 4.2 런타임 어댑터를 만든다(Claude Code와 Codex의 포크 명령, 추가 폴더, 인자의 묶음)
-- [x] 4.3 Herdr 어댑터를 만든다(탭 만들기, 에이전트 띄우기와 재시도, 준비 기다리기, 프롬프트 제출, 탭 닫기)
-- [x] 4.4 `thread create`를 만든다(`--repo`, `--mode`, 스레드 기록, 첫 메시지)
+- [x] 4.3 Herdr 어댑터를 만든다(탭 만들기, 창에서 포크 명령 실행, 탭 조회와 닫기)
+- [x] 4.4 `thread create`를 만든다(`--repo`, `--mode`, 스레드 기록, 기다리지 않기, 스레드 안에서 거절, 이름 겹침 거절)
 - [x] 4.5 `thread list`, `thread close`를 만든다
 - [x] 4.6 가짜 실행기로 명령의 조립과 실패 경로를 시험한다
 

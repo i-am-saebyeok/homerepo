@@ -37,7 +37,7 @@
 - **THEN** 목록에 "밖"으로 표시되고, 해제와 닫기의 대상이 되지 않는다
 
 ### Requirement: worktree 해제
-`homerepo workspace release <저장소>`는 그 스레드의 worktree를 지워야 한다(SHALL). 커밋하지 않은 변경이 있으면 지우지 않고 알려야 한다(MUST). 브랜치는 지우지 않는다.
+`homerepo workspace release <저장소>`는 그 스레드의 worktree를 지워야 한다(SHALL). 커밋하지 않은 변경이 있으면 지우지 않고 알려야 한다(MUST). 브랜치는 지우지 않는다. Git이 무시하는 파일은 커밋하지 않은 변경으로 치지 않는다.
 
 #### Scenario: 깨끗한 worktree
 - **WHEN** 커밋하지 않은 변경이 없는 worktree를 해제한다

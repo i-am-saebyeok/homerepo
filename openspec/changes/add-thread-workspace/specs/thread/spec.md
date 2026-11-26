@@ -17,6 +17,14 @@
 - **WHEN** Herdr 안의 Codex 세션에서 같은 명령을 실행한다
 - **THEN** 새 탭에 그 대화를 포크한 Codex 세션이 뜬다
 
+#### Scenario: 런타임을 환경에서 알아낸다
+- **WHEN** 환경에 `CODEX_SESSION_ID`가 있고 `CLAUDECODE`가 없다
+- **THEN** 런타임은 Codex이고 `CODEX_SESSION_ID`의 값을 세션 ID로 쓴다
+
+#### Scenario: 두 런타임의 환경이 함께 있다
+- **WHEN** 환경에 `CLAUDECODE=1`과 `CODEX_SESSION_ID`가 함께 있고 `--runtime`이 없다
+- **THEN** 아무것도 만들지 않고 `--runtime`을 요구한다
+
 #### Scenario: 런타임이나 멀티플렉서를 알 수 없다
 - **WHEN** 에이전트 세션 밖이거나 Herdr 밖에서 실행한다
 - **THEN** 아무것도 만들지 않고, 무엇을 찾지 못했는지 알리며 0이 아닌 코드로 끝난다
@@ -25,16 +33,31 @@
 - **WHEN** 이미 있는 스레드의 이름으로 만든다
 - **THEN** 아무것도 만들지 않고 이름이 겹친다고 알린다
 
-### Requirement: 첫 메시지
-시스템은 포크된 세션이 입력을 받을 준비가 되면 첫 메시지를 보내야 한다(SHALL). 첫 메시지는 이 세션이 스레드라는 것, 스레드의 이름, 코드 작업은 worktree에서 한다는 것, worktree를 만드는 명령을 알린다.
+#### Scenario: 이름이 겹치는 스레드가 있다
+- **WHEN** 스레드 `fix`가 있는데 `fix/login`을 만들거나, `fix/login`이 있는데 `fix`를 만든다
+- **THEN** 아무것도 만들지 않고 두 이름이 Git의 브랜치로 함께 있을 수 없다고 알린다
 
-#### Scenario: 준비된 뒤에 보낸다
-- **WHEN** 포크된 세션이 입력 대기 상태가 된다
-- **THEN** 첫 메시지가 그 세션에 제출된다
+### Requirement: 스레드 안에서 만들기를 거절한다
+환경에 `HOMEREPO_THREAD`가 있으면 `thread create`는 아무것도 만들지 않고 0이 아닌 코드로 끝나야 한다(SHALL). 이미 그 스레드 안에 있다는 것과 `homerepo workspace create <저장소>`로 worktree를 만들어 거기서 일하라는 것을 알린다.
+
+#### Scenario: 스레드 안에서 부른다
+- **WHEN** 스레드 `login-fix`의 세션에서 `homerepo thread create`를 실행한다
+- **THEN** 탭도 worktree도 기록도 생기지 않고, 이미 `login-fix` 안에 있다는 것과 worktree를 만드는 명령을 알린다
+
+### Requirement: 세션이 준비되기를 기다리지 않는다
+`thread create`는 탭을 만들고, 그 탭의 창에서 포크 명령을 실행하고, 스레드 기록을 쓴 뒤 끝나야 한다(SHALL). 세션이 입력을 받을 준비가 되기를 기다리지 않으며, 그 세션에 메시지나 키 입력을 보내지 않는다. 출력은 스레드의 이름과 탭을 알리는 한 줄이다. 포크 명령의 실행 파일 이름과 인자는 각각 따로 넘겨, 빈칸이 든 경로나 인자도 하나의 인자로 남는다.
+
+#### Scenario: 띄우고 돌아온다
+- **WHEN** `homerepo thread create login-fix`를 실행한다
+- **THEN** 새 탭의 창에서 포크 명령이 실행되고, 명령은 세션의 준비를 기다리지 않고 0으로 끝나며 스레드 이름과 탭을 한 줄로 출력한다
 
 #### Scenario: 세션이 확인 창에서 멈춘다
-- **WHEN** 포크된 세션이 신뢰나 승인을 묻는 창을 띄워 준비되지 않는다
-- **THEN** 시스템은 그 창에 입력을 보내지 않고, 사람이 그 탭에서 답해야 한다고 알린다
+- **WHEN** 포크된 세션이 신뢰나 승인을 묻는 창을 띄운다
+- **THEN** 시스템은 그 탭에 입력을 보내지 않고, 사람이 그 탭에서 답한 뒤 말을 걸어 스레드를 시작한다
+
+#### Scenario: 인자에 빈칸이 있다
+- **WHEN** clone의 경로나 실행 인자의 묶음에 빈칸이 있다
+- **THEN** 그 경로와 인자는 쪼개지지 않고 하나의 인자로 포크 명령에 넘겨진다
 
 ### Requirement: 실행 인자의 묶음
 시스템은 `.homerepo/config.yaml`의 `runtimes.<런타임>.thread.<묶음>`에 적힌 인자를 포크 명령에 덧붙여야 한다(SHALL). `--mode`가 없으면 `default` 묶음을 쓰고, `default`가 없으면 인자를 붙이지 않는다.
