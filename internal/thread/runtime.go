@@ -11,6 +11,8 @@ import (
 
 type Runtime string
 
+const threadPlaceholder = "{thread}"
+
 const (
 	Claude Runtime = "claude"
 	Codex  Runtime = "codex"
@@ -151,6 +153,14 @@ func argumentBundle(local home.LocalConfig, runtime Runtime, mode string) ([]str
 		return args, nil
 	}
 	return nil, fmt.Errorf("no argument bundle %q for %s in runtimes.%s.thread; available: %s", mode, runtime, runtime, bundleNames(bundles))
+}
+
+func withThreadName(bundle []string, thread string) []string {
+	filled := make([]string, 0, len(bundle))
+	for _, arg := range bundle {
+		filled = append(filled, strings.ReplaceAll(arg, threadPlaceholder, thread))
+	}
+	return filled
 }
 
 func bundleNames(bundles map[string][]string) string {
