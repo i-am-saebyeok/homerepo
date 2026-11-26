@@ -484,3 +484,55 @@ func TestThreadCreateRejectsNamesThatOverlapInGit(t *testing.T) {
 		})
 	}
 }
+
+func TestThreadCreateFillsThreadNameIntoBundle(t *testing.T) {
+	cases := map[string]struct {
+		thread string
+		bundle string
+		want   []string
+	}{
+		"whole argument":     {thread: "login-fix", bundle: `[--remote-control, "{thread}"]`, want: []string{"--remote-control", "login-fix"}},
+		"mixed with text":    {thread: "login-fix", bundle: `["name={thread}"]`, want: []string{"name=login-fix"}},
+		"repeated":           {thread: "login-fix", bundle: `["{thread}-{thread}"]`, want: []string{"login-fix-login-fix"}},
+		"other braces":       {thread: "login-fix", bundle: `["{repo}", "{thread}{repo}", "{Thread}"]`, want: []string{"{repo}", "login-fix{repo}", "{Thread}"}},
+		"no placeholder":     {thread: "login-fix", bundle: `[--model, opus]`, want: []string{"--model", "opus"}},
+		"nested thread name": {thread: "fix/login", bundle: `[--remote-control, "{thread}"]`, want: []string{"--remote-control", "fix/login"}},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newFixture(t)
+			f.writeLocalConfig("runtimes:\n  claude:\n    thread:\n      default: " + testCase.bundle + "\n")
+			fake := f.useHerdr()
+			f.enterClaudeSession()
+
+			f.mustRun("thread", "create", testCase.thread)
+
+			want := append([]string{"claude", "--resume", "session-1", "--fork-session"}, testCase.want...)
+			if got := fake.runtimeCommand(t); !slices.Equal(got, want) {
+				t.Fatalf("runtime command %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestThreadCreateWithoutBundleAddsNoArguments(t *testing.T) {
+	f := newFixture(t)
+	fake := f.useHerdr()
+	f.enterClaudeSession()
+	f.mustRun("thread", "create", "login-fix")
+	if got := fake.runtimeCommand(t); !slices.Equal(got, []string{"claude", "--resume", "session-1", "--fork-session"}) {
+		t.Fatalf("runtime command %q", got)
+	}
+}
+
+func TestThreadCreateKeepsConfiguredBundleUnchanged(t *testing.T) {
+	f := newFixture(t)
+	f.writeLocalConfig("runtimes:\n  claude:\n    thread:\n      default: [--remote-control, \"{thread}\"]\n")
+	fake := f.useHerdr()
+	f.enterClaudeSession()
+	f.mustRun("thread", "create", "first")
+	f.mustRun("thread", "create", "second")
+	if got := fake.runtimeArgs(t); !slices.Equal(got, []string{"--resume", "session-1", "--fork-session", "--remote-control", "second"}) {
+		t.Fatalf("second thread args %q", got)
+	}
+}

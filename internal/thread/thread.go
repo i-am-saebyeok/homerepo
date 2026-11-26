@@ -85,7 +85,7 @@ func (t Threads) checkCreate(request CreateRequest) (runtimeAdapter, []string, e
 		return runtimeAdapter{}, nil, err
 	}
 	bundle, err := argumentBundle(t.Home.Local, request.Caller.Runtime, request.Mode)
-	return adapter, bundle, err
+	return adapter, withThreadName(bundle, request.Name), err
 }
 
 func (t Threads) checkNameIsFree(name string) error {
