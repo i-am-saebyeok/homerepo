@@ -29,10 +29,11 @@ type fakeHerdr struct {
 	prompts         []prompt
 	keysSent        bool
 	handleTabCreate func(pane string)
+	screens         map[string]string
 }
 
 func newFakeHerdr(w *world) *fakeHerdr {
-	return &fakeHerdr{world: w, openTabs: map[string]string{}, statuses: map[string][]herdr.AgentStatus{}}
+	return &fakeHerdr{world: w, openTabs: map[string]string{}, statuses: map[string][]herdr.AgentStatus{}, screens: map[string]string{}}
 }
 
 func fail(cmd command.Command, code string) error {
@@ -106,6 +107,8 @@ func (h *fakeHerdr) handle(cmd command.Command) (command.Output, error) {
 			return command.Output{}, fail(cmd, "agent_not_found")
 		}
 		return reply(`{"result":{"agent":{"agent_status":"` + string(status) + `"}}}`)
+	case "pane read":
+		return reply(h.screens[cmd.Args[2]])
 	case "agent prompt":
 		return h.prompt(cmd)
 	case "agent send-keys":

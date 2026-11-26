@@ -3,6 +3,7 @@ package herdr_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,5 +106,22 @@ func TestRunInPaneReturnsOtherErrorsAtOnce(t *testing.T) {
 	client, slept, runs := clientRejectingRuns(1000, "pane_not_found")
 	if err := client.RunInPane(context.Background(), "w1:p1", "codex", nil); herdr.ErrorCode(err) != "pane_not_found" || *runs != 1 || len(*slept) != 0 {
 		t.Fatalf("err %v, runs %d, slept %v", err, *runs, *slept)
+	}
+}
+
+func TestReadVisibleAsksForTheVisibleScreen(t *testing.T) {
+	var asked []string
+	runner := &commandtest.Fake{Handlers: map[string]commandtest.Handler{
+		"herdr": func(cmd command.Command) (command.Output, error) {
+			asked = cmd.Args
+			return command.Output{Stdout: []byte("Allow this command?\n")}, nil
+		},
+	}}
+	screen, err := herdr.Client{Runner: runner}.ReadVisible(context.Background(), "w1:p2", 12)
+	if err != nil || screen != "Allow this command?\n" {
+		t.Fatalf("screen %q, err %v", screen, err)
+	}
+	if strings.Join(asked, " ") != "pane read w1:p2 --source visible --lines 12" {
+		t.Fatalf("asked %v", asked)
 	}
 }

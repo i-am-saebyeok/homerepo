@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 	"github.com/i-am-saebyeok/homerepo/internal/dogfood"
@@ -327,12 +328,16 @@ func TestThreadWaitingForConfirmationGetsNoInput(t *testing.T) {
 	w.coordinate = func(w *world) {
 		w.createRepositoryAndThread()
 		w.herdr.statuses[w.herdr.threadPane] = []herdr.AgentStatus{herdr.AgentAbsent, herdr.AgentBlocked}
+		w.herdr.screens[w.herdr.threadPane] = "Allow running this command?\n"
 	}
 	got := w.runScenario()
 	if got.code == 0 {
 		t.Fatal("expected failure")
 	}
-	mustContain(t, got.stdout, "FAIL  thread started", "is waiting for a confirmation; no keys were sent")
+	mustContain(t, got.stdout, "FAIL  thread started", "is waiting for a confirmation; no keys were sent", "  | Allow running this command?")
+	if strings.Contains(got.stdout, "trust question") {
+		t.Fatalf("thread note guesses at the prompt:\n%s", got.stdout)
+	}
 	if len(w.herdr.promptsTo(w.herdr.threadPane)) > 0 || w.herdr.keysSent {
 		t.Fatal("input was sent to the blocked thread")
 	}
@@ -342,12 +347,13 @@ func TestCoordinatorWaitingForTrustStops(t *testing.T) {
 	w := newWorld(t)
 	w.herdr.handleTabCreate = func(pane string) {
 		w.herdr.statuses[pane] = []herdr.AgentStatus{herdr.AgentAbsent, herdr.AgentBlocked}
+		w.herdr.screens[pane] = "Do you trust the files in this folder?\n> Yes\n  No\n\n"
 	}
 	got := w.runScenario()
 	if got.code == 0 {
 		t.Fatal("expected failure")
 	}
-	mustContain(t, got.stdout, "answer the trust question", w.layout.Home())
+	mustContain(t, got.stdout, "answer the trust question", w.layout.Home(), "  | Do you trust the files in this folder?\n  | > Yes\n  |   No\n")
 	if len(w.herdr.prompts) > 0 || w.herdr.keysSent {
 		t.Fatal("input was sent to the blocked coordinator")
 	}
@@ -363,4 +369,63 @@ func TestThreadPastTimeLimit(t *testing.T) {
 	mustContain(t, got.stdout, `time limit reached: thread "`+threadName, "timed out after 10m0s", "PASS  thread started", "PASS  repository declared", "FAIL  worktree")
 	threadPrompt := w.herdr.promptsTo(w.herdr.threadPane)[0]
 	mustContain(t, strings.Join(threadPrompt.args, " "), "--wait", "--until done", "--until idle", "--until blocked", "--timeout")
+}
+
+const startingStatus = herdr.AgentStatus("unknown")
+
+func TestCoordinatorBlockedAfterScenarioShowsScreenWithoutTrustHint(t *testing.T) {
+	w := newWorld(t)
+	w.coordinate = func(w *world) {
+		w.herdr.statuses[w.herdr.coordinatorPane] = []herdr.AgentStatus{herdr.AgentBlocked}
+		w.herdr.screens[w.herdr.coordinatorPane] = "Run homerepo thread create?\n"
+	}
+	got := w.runScenario()
+	mustContain(t, got.stdout, "no thread was created; see the coordinator in pane w1:p1: waiting for a confirmation", "  | Run homerepo thread create?")
+	if strings.Contains(got.stdout, "trust question") {
+		t.Fatalf("note guesses at the prompt:\n%s", got.stdout)
+	}
+}
+
+func TestCoordinatorThatExitsRightAwayFailsAtOnce(t *testing.T) {
+	w := newWorld(t)
+	w.herdr.handleTabCreate = func(pane string) {
+		w.herdr.statuses[pane] = []herdr.AgentStatus{herdr.AgentAbsent, startingStatus, herdr.AgentAbsent}
+		w.herdr.screens[pane] = "Error adding directories\n$ \n"
+	}
+	started := w.now
+	got := w.runScenario()
+	if got.code == 0 {
+		t.Fatal("expected failure")
+	}
+	mustContain(t, got.stdout, "the coordinator in pane w1:p1 did not start: the runtime exited and the pane is back at its shell", "  | Error adding directories")
+	if strings.Contains(got.stdout, "timed out") || w.now.Sub(started) > time.Minute || len(w.herdr.prompts) > 0 {
+		t.Fatalf("waited %s, prompts %v\n%s", w.now.Sub(started), w.herdr.prompts, got.stdout)
+	}
+}
+
+func TestRuntimeThatNeverAppearsFailsBeforeTimeLimit(t *testing.T) {
+	w := newWorld(t)
+	w.herdr.handleTabCreate = func(pane string) {
+		w.herdr.statuses[pane] = []herdr.AgentStatus{herdr.AgentAbsent}
+		w.herdr.screens[pane] = "$ \n"
+	}
+	got := w.runScenario()
+	mustContain(t, got.stdout, "did not start: no runtime appeared in the pane within 1m0s", "  | $")
+	if strings.Contains(got.stdout, "timed out") {
+		t.Fatalf("waited for the time limit:\n%s", got.stdout)
+	}
+}
+
+func TestThreadThatExitsRightAwayFailsAtOnce(t *testing.T) {
+	w := newWorld(t)
+	w.coordinate = func(w *world) {
+		w.createRepositoryAndThread()
+		w.herdr.statuses[w.herdr.threadPane] = []herdr.AgentStatus{startingStatus, herdr.AgentAbsent}
+		w.herdr.screens[w.herdr.threadPane] = "session not found\n"
+	}
+	got := w.runScenario()
+	mustContain(t, got.stdout, `thread "first-change" in pane w1:p2 did not start: the runtime exited`, "  | session not found", "FAIL  thread started")
+	if strings.Contains(got.stdout, "timed out") || len(w.herdr.promptsTo(w.herdr.threadPane)) > 0 {
+		t.Fatalf("unexpected:\n%s", got.stdout)
+	}
 }
