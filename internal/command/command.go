@@ -5,14 +5,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"strings"
 )
 
 type Command struct {
-	Name string
-	Args []string
-	Dir  string
+	Name        string
+	Args        []string
+	Dir         string
+	Environment []string
+	Stream      io.Writer
 }
 
 func (c Command) String() string {
@@ -43,9 +47,12 @@ type Exec struct{}
 func (Exec) Run(ctx context.Context, cmd Command) (Output, error) {
 	process := exec.CommandContext(ctx, cmd.Name, cmd.Args...)
 	process.Dir = cmd.Dir
+	if len(cmd.Environment) > 0 {
+		process.Env = append(os.Environ(), cmd.Environment...)
+	}
 	var stdout, stderr bytes.Buffer
-	process.Stdout = &stdout
-	process.Stderr = &stderr
+	process.Stdout = outputTarget(cmd.Stream, &stdout)
+	process.Stderr = outputTarget(cmd.Stream, &stderr)
 	err := process.Run()
 	output := Output{Stdout: stdout.Bytes(), Stderr: stderr.Bytes()}
 	var exitErr *exec.ExitError
@@ -56,4 +63,11 @@ func (Exec) Run(ctx context.Context, cmd Command) (Output, error) {
 		return output, fmt.Errorf("%s: %w", cmd.Name, err)
 	}
 	return output, nil
+}
+
+func outputTarget(stream io.Writer, capture *bytes.Buffer) io.Writer {
+	if stream != nil {
+		return stream
+	}
+	return capture
 }

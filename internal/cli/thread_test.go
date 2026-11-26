@@ -20,6 +20,7 @@ type fakeHerdr struct {
 	createdTabs int
 	calls       [][]string
 	onTabCreate func()
+	onPaneRun   func()
 }
 
 func (f *fixture) useHerdr() *fakeHerdr {
@@ -61,6 +62,9 @@ func (h *fakeHerdr) handle(cmd command.Command) (command.Output, error) {
 		h.openTabs[tab] = true
 		return reply(`{"id":"cli:tab:create","result":{"tab":{"tab_id":"` + tab + `"},"root_pane":{"pane_id":"` + tab + `:p1"}}}`)
 	case "pane run":
+		if h.onPaneRun != nil {
+			h.onPaneRun()
+		}
 		return reply(`{"id":"cli:pane:run","result":{}}`)
 	case "tab get", "tab close":
 		tab := cmd.Args[2]
