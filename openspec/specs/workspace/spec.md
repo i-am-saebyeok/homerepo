@@ -7,7 +7,7 @@
 ## Requirements
 
 ### Requirement: worktree 생성
-`homerepo workspace create <저장소>`는 그 저장소의 clone 안 `.worktrees/<스레드 이름>`에 worktree를 만들어야 한다(SHALL). 브랜치의 이름은 스레드의 이름과 같고, 원격에서 받은 기본 브랜치에서 갈라진다. 사람의 원래 작업 폴더에는 fetch 말고 아무것도 하지 않는다.
+`homerepo workspace create <저장소>`는 그 저장소의 clone 안 `.worktrees/<스레드 이름>`에 worktree를 만들어야 한다(SHALL). 브랜치의 이름은 스레드의 이름과 같고, 원격에서 받은 기본 브랜치에서 갈라진다. 사람의 원래 작업 폴더에는 fetch 말고 아무것도 하지 않는다. 선언한 브랜치가 원격에 없으면 아무것도 만들지 않고, 그 브랜치가 원격에 없다는 것과 그 브랜치에 첫 커밋을 올려야 한다는 것을 알린다.
 
 #### Scenario: 스레드 안에서 만든다
 - **WHEN** 스레드 `login-fix`의 세션에서 `homerepo workspace create frontend`를 실행한다
@@ -28,6 +28,10 @@
 #### Scenario: 원래 작업 폴더에 변경이 있다
 - **WHEN** 사람의 원래 작업 폴더에 커밋하지 않은 변경이 있다
 - **THEN** worktree는 만들어지고 원래 작업 폴더의 파일과 브랜치는 바뀌지 않는다
+
+#### Scenario: 원격에 선언한 브랜치가 없다
+- **WHEN** 선언한 브랜치 `main`이 아직 원격에 없다(빈 원격)
+- **THEN** worktree와 브랜치가 생기지 않고, 원격에 `main`이 없으니 첫 커밋을 올려야 한다고 알리며 0이 아닌 코드로 끝난다
 
 ### Requirement: worktree 목록
 `homerepo workspace list`는 스레드의 worktree마다 저장소, 경로, 브랜치, 커밋하지 않은 변경이 있는지를 출력해야 한다(SHALL). 이 시스템이 만들지 않은 worktree는 구분해서 표시하고 다루지 않는다.

@@ -27,61 +27,65 @@ type App struct {
 	Sleep  func(time.Duration)
 }
 
-type handler func(ctx context.Context, app App, args []string) error
-
-type usageError struct {
-	message string
-}
-
-func (e usageError) Error() string {
-	return e.message
-}
-
-func usagef(format string, values ...any) error {
-	return usageError{message: fmt.Sprintf(format, values...)}
-}
-
-const usage = `usage:
-  homerepo init
-  homerepo repo list
-  homerepo repo path <repository>
-  homerepo workspace create <repository> [--thread <name>]
-  homerepo workspace list
-  homerepo workspace release <repository> [--thread <name>]
-  homerepo thread create <name> [--repo <repository>]... [--mode <bundle>] [--runtime claude|codex] [--session <id>]
-  homerepo thread list
-  homerepo thread close <name>`
-
 func (app App) Run(ctx context.Context, args []string) int {
-	run, rest, ok := lookup(args)
-	if !ok {
-		fmt.Fprintln(app.Stderr, usage)
-		return exitUsage
+	if len(args) == 1 && isHelpFlag(args[0]) {
+		fmt.Fprint(app.Stdout, usageOf(""))
+		return exitOK
 	}
-	err := run(ctx, app, rest)
+	spec, rest, found := lookup(args)
+	if !found {
+		return app.runGroup(args)
+	}
+	return app.finish(spec, spec.run(ctx, app, rest))
+}
+
+func (app App) runGroup(args []string) int {
+	group := groupOf(args)
+	if group != "" && len(args) == 2 && isHelpFlag(args[1]) {
+		fmt.Fprint(app.Stdout, usageOf(group))
+		return exitOK
+	}
+	if len(args) > 0 {
+		fmt.Fprintf(app.Stderr, "homerepo: unknown command: %s\n", strings.Join(args, " "))
+	}
+	fmt.Fprint(app.Stderr, usageOf(group))
+	return exitUsage
+}
+
+func (app App) finish(spec commandSpec, err error) int {
 	if err == nil {
+		return exitOK
+	}
+	var help helpRequested
+	if errors.As(err, &help) {
+		fmt.Fprint(app.Stdout, spec.help(help.flags))
 		return exitOK
 	}
 	fmt.Fprintf(app.Stderr, "homerepo: %s\n", err)
 	var usageErr usageError
 	if errors.As(err, &usageErr) {
+		fmt.Fprint(app.Stderr, spec.help(usageErr.flags))
 		return exitUsage
 	}
 	return exitError
 }
 
-func lookup(args []string) (handler, []string, bool) {
+func lookup(args []string) (commandSpec, []string, bool) {
 	if len(args) >= 2 {
-		if run, ok := commands[args[0]+" "+args[1]]; ok {
-			return run, args[2:], true
+		if spec, ok := findCommand(args[0] + " " + args[1]); ok {
+			return spec, args[2:], true
 		}
 	}
 	if len(args) >= 1 {
-		if run, ok := commands[args[0]]; ok {
-			return run, args[1:], true
+		if spec, ok := findCommand(args[0]); ok {
+			return spec, args[1:], true
 		}
 	}
-	return nil, nil, false
+	return commandSpec{}, nil, false
+}
+
+func isHelpFlag(arg string) bool {
+	return arg == "-h" || arg == "--help"
 }
 
 func (app App) println(values ...string) {

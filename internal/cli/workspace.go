@@ -30,7 +30,7 @@ func (app App) threadName(flagValue string) (string, error) {
 
 func parseWorkspaceArgs(name string, args []string) (string, string, error) {
 	flags := newFlags(name)
-	threadFlag := flags.String("thread", "", "thread name")
+	threadFlag := flags.String("thread", "", "`name` of the thread (default: $"+thread.EnvironmentVariable+")")
 	positionals, err := parse(flags, args, 1)
 	if err != nil {
 		return "", "", err

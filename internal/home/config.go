@@ -70,14 +70,19 @@ func readDeclaration(path string) (declaration, error) {
 	if err != nil {
 		return declaration{}, err
 	}
-	var parsed declaration
-	if err := decodeStrict(content, &parsed); err != nil {
-		return declaration{}, fmt.Errorf("%s: %w", path, err)
-	}
-	if err := checkRepositories(parsed.Repositories); err != nil {
+	parsed, err := parseDeclaration(content)
+	if err != nil {
 		return declaration{}, fmt.Errorf("%s: %w", path, err)
 	}
 	return parsed, nil
+}
+
+func parseDeclaration(content []byte) (declaration, error) {
+	var parsed declaration
+	if err := decodeStrict(content, &parsed); err != nil {
+		return declaration{}, err
+	}
+	return parsed, checkRepositories(parsed.Repositories)
 }
 
 func readLocalConfig(path string) (LocalConfig, error) {
@@ -108,8 +113,8 @@ func decodeStrict(content []byte, target any) error {
 func checkRepositories(repositories []Repository) error {
 	seen := map[string]bool{}
 	for index, repository := range repositories {
-		if !repositoryName.MatchString(repository.Name) {
-			return fmt.Errorf("repository %d: name %q must start with a letter or digit and use only letters, digits, '.', '_' and '-'", index+1, repository.Name)
+		if err := checkRepositoryName(repository.Name); err != nil {
+			return fmt.Errorf("repository %d: %w", index+1, err)
 		}
 		if seen[repository.Name] {
 			return fmt.Errorf("repository %q is declared twice", repository.Name)
@@ -121,6 +126,13 @@ func checkRepositories(repositories []Repository) error {
 		if repository.Branch == "" {
 			return fmt.Errorf("repository %q: branch is empty", repository.Name)
 		}
+	}
+	return nil
+}
+
+func checkRepositoryName(name string) error {
+	if !repositoryName.MatchString(name) {
+		return fmt.Errorf("name %q must start with a letter or digit and use only letters, digits, '.', '_' and '-'", name)
 	}
 	return nil
 }
