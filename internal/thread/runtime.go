@@ -136,6 +136,35 @@ func runtimeNames() string {
 	return strings.Join(names, " or ")
 }
 
+type launch struct {
+	adapter runtimeAdapter
+	bundle  []string
+	attach  bool
+}
+
+func prepareLaunch(local home.LocalConfig, request CreateRequest) (launch, error) {
+	adapter, err := adapterFor(request.Caller.Runtime)
+	if err != nil {
+		return launch{}, err
+	}
+	bundle, err := argumentBundle(local, request.Caller.Runtime, request.Mode)
+	if err != nil {
+		return launch{}, err
+	}
+	return launch{
+		adapter: adapter,
+		bundle:  withThreadName(bundle, request.Name),
+		attach:  local.Runtimes[string(request.Caller.Runtime)].AttachesWorktrees(),
+	}, nil
+}
+
+func (l launch) args(session string, worktreeDirs []string) []string {
+	if !l.attach {
+		return launchArgs(l.adapter, session, nil, l.bundle)
+	}
+	return launchArgs(l.adapter, session, worktreeDirs, l.bundle)
+}
+
 func launchArgs(adapter runtimeAdapter, session string, attachDirs []string, bundle []string) []string {
 	args := adapter.fork(session)
 	for _, dir := range attachDirs {
