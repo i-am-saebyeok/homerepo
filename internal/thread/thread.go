@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ type Threads struct {
 	Workspaces workspace.Workspaces
 	Herdr      herdr.Client
 	Records    Records
+	Hooks      Hooks
 	Now        func() time.Time
 }
 
@@ -40,13 +42,16 @@ func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, err
 	if err != nil {
 		return Record{}, err
 	}
+	values := hookValues{thread: request.Name, runtime: request.Caller.Runtime, attachDirs: t.attachDirs(request.Repositories)}
+	if err := t.Hooks.beforeCreate(ctx, values); err != nil {
+		return Record{}, err
+	}
 	for _, repository := range request.Repositories {
 		if _, err := t.Workspaces.Create(ctx, repository, request.Name); err != nil {
 			return Record{}, err
 		}
 	}
-	attachDirs, err := t.attachDirs()
-	if err != nil {
+	if err := ensureIgnoredDirs(values.attachDirs); err != nil {
 		return Record{}, err
 	}
 	tab, err := t.Herdr.CreateTab(ctx, herdr.TabRequest{
@@ -62,8 +67,11 @@ func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, err
 	if err := t.Records.Write(record); err != nil {
 		return record, err
 	}
-	if err := t.Herdr.RunInPane(ctx, tab.Pane, adapter.program, launchArgs(adapter, request.Caller.Session, attachDirs, bundle)); err != nil {
+	if err := t.Herdr.RunInPane(ctx, tab.Pane, adapter.program, launchArgs(adapter, request.Caller.Session, values.attachDirs, bundle)); err != nil {
 		return record, fmt.Errorf("tab %s was created but the session did not start (close it with `homerepo thread close %s`): %w", tab.ID, request.Name, err)
+	}
+	if err := t.Hooks.afterCreate(ctx, values, tab); err != nil {
+		return record, fmt.Errorf("thread %q was created in tab %s, but %w", request.Name, tab.ID, err)
 	}
 	return record, nil
 }
@@ -104,19 +112,23 @@ func (t Threads) checkNameIsFree(name string) error {
 	return nil
 }
 
-func (t Threads) attachDirs() ([]string, error) {
+func (t Threads) attachDirs(requested []string) []string {
 	var dirs []string
 	for _, repository := range t.Home.Repositories {
-		if !home.IsDir(t.Home.ClonePath(repository.Name)) {
-			continue
+		if home.IsDir(t.Home.ClonePath(repository.Name)) || slices.Contains(requested, repository.Name) {
+			dirs = append(dirs, t.Home.WorktreesPath(repository.Name))
 		}
-		dir := t.Home.WorktreesPath(repository.Name)
-		if _, err := home.EnsureIgnoredDir(dir); err != nil {
-			return nil, err
-		}
-		dirs = append(dirs, dir)
 	}
-	return dirs, nil
+	return dirs
+}
+
+func ensureIgnoredDirs(dirs []string) error {
+	for _, dir := range dirs {
+		if _, err := home.EnsureIgnoredDir(dir); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (t Threads) List(ctx context.Context) ([]Summary, error) {

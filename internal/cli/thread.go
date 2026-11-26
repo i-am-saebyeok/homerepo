@@ -21,6 +21,7 @@ func (app App) threads() (thread.Threads, error) {
 		Workspaces: workspace.Workspaces{Home: loaded, Runner: app.Runner},
 		Herdr:      herdr.Client{Runner: app.Runner},
 		Records:    thread.Records{HomeRoot: loaded.Root},
+		Hooks:      thread.Hooks{HomeRoot: loaded.Root, Runner: app.Runner, Output: app.Stderr},
 		Now:        app.Now,
 	}, nil
 }
