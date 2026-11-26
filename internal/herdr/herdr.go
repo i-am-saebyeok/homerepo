@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/i-am-saebyeok/homerepo/internal/command"
@@ -64,7 +65,10 @@ func (c Client) CreateTab(ctx context.Context, request TabRequest) (Tab, error) 
 }
 
 func (c Client) RunInPane(ctx context.Context, pane string, program string, args []string) error {
-	request := append([]string{"pane", "run", pane, program}, args...)
+	request := []string{"pane", "run", pane, shellQuote(program)}
+	for _, arg := range args {
+		request = append(request, shellQuote(arg))
+	}
 	for waited := time.Duration(0); ; waited += SendRetryInterval {
 		_, err := c.run(ctx, request...)
 		if !slices.Contains(notReadyForInput, ErrorCode(err)) || waited >= SendRetryLimit {
@@ -72,6 +76,10 @@ func (c Client) RunInPane(ctx context.Context, pane string, program string, args
 		}
 		c.sleep(SendRetryInterval)
 	}
+}
+
+func shellQuote(word string) string {
+	return "'" + strings.ReplaceAll(word, "'", `'\''`) + "'"
 }
 
 func (c Client) sleep(duration time.Duration) {

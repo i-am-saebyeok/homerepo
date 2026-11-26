@@ -3,6 +3,7 @@ package herdr_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 	"github.com/i-am-saebyeok/homerepo/internal/command/commandtest"
 	"github.com/i-am-saebyeok/homerepo/internal/herdr"
+	"github.com/i-am-saebyeok/homerepo/internal/herdr/herdrtest"
 )
 
 func clientReplying(stdout string, err error) herdr.Client {
@@ -123,5 +125,40 @@ func TestReadVisibleAsksForTheVisibleScreen(t *testing.T) {
 	}
 	if strings.Join(asked, " ") != "pane read w1:p2 --source visible --lines 12" {
 		t.Fatalf("asked %v", asked)
+	}
+}
+
+var awkwardArgs = []string{"--add-dir", "/tmp/a b", `-c`, `x.unix_sockets={"/tmp/a b.sock"="allow"}`, "$HOME", "it's", "", `back\slash`, "*", "a;b", "two\nlines"}
+
+func recordingClient() (herdr.Client, *[]string) {
+	var sent []string
+	runner := &commandtest.Fake{Handlers: map[string]commandtest.Handler{
+		"herdr": func(cmd command.Command) (command.Output, error) {
+			sent = cmd.Args
+			return command.Output{Stdout: []byte(`{"result":{}}`)}, nil
+		},
+	}}
+	return herdr.Client{Runner: runner}, &sent
+}
+
+func TestRunInPaneQuotesEveryWordForTheShell(t *testing.T) {
+	client, sent := recordingClient()
+	if err := client.RunInPane(context.Background(), "w1:p1", "my codex", []string{"/tmp/a b", `{"k"="v"}`, "$HOME", "it's", ""}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"pane", "run", "w1:p1", `'my codex'`, `'/tmp/a b'`, `'{"k"="v"}'`, `'$HOME'`, `'it'\''s'`, `''`}
+	if !slices.Equal(*sent, want) {
+		t.Fatalf("sent %q", *sent)
+	}
+}
+
+func TestShellGetsEveryArgumentAsWritten(t *testing.T) {
+	client, sent := recordingClient()
+	if err := client.RunInPane(context.Background(), "w1:p1", "codex", awkwardArgs); err != nil {
+		t.Fatal(err)
+	}
+	words := herdrtest.ShellWords(t, (*sent)[3:])
+	if !slices.Equal(words, append([]string{"codex"}, awkwardArgs...)) {
+		t.Fatalf("shell got %q", words)
 	}
 }

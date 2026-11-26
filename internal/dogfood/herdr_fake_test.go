@@ -8,6 +8,7 @@ import (
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 	"github.com/i-am-saebyeok/homerepo/internal/command/commandtest"
 	"github.com/i-am-saebyeok/homerepo/internal/herdr"
+	"github.com/i-am-saebyeok/homerepo/internal/herdr/herdrtest"
 )
 
 type prompt struct {
@@ -93,7 +94,7 @@ func (h *fakeHerdr) handle(cmd command.Command) (command.Output, error) {
 			h.busyRuns--
 			return command.Output{}, fail(cmd, "pane_send_failed")
 		}
-		h.paneRuns = append(h.paneRuns, cmd.Args[2:])
+		h.paneRuns = append(h.paneRuns, append([]string{cmd.Args[2]}, herdrtest.ShellWords(h.world.t, cmd.Args[3:])...))
 		return reply(`{"result":{}}`)
 	case "pane list":
 		var panes []string

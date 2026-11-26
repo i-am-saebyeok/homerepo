@@ -11,6 +11,7 @@ import (
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 	"github.com/i-am-saebyeok/homerepo/internal/command/commandtest"
 	"github.com/i-am-saebyeok/homerepo/internal/gittest"
+	"github.com/i-am-saebyeok/homerepo/internal/herdr/herdrtest"
 )
 
 const callerPane = "w1:p0"
@@ -107,7 +108,7 @@ func (h *fakeHerdr) runtimeCommand(t *testing.T) []string {
 	if len(runs) == 0 {
 		t.Fatal("no session was started")
 	}
-	return runs[len(runs)-1][3:]
+	return herdrtest.ShellWords(t, runs[len(runs)-1][3:])
 }
 
 func (h *fakeHerdr) runtimeArgs(t *testing.T) []string {
@@ -130,7 +131,7 @@ func TestThreadCreateFromClaudeSession(t *testing.T) {
 	frontendWorktrees := filepath.Join(f.clonePath("frontend"), ".worktrees")
 	wantCalls := [][]string{
 		{"tab", "create", "--workspace", "w1", "--cwd", f.home, "--label", "login-fix", "--env", "HOMEREPO_THREAD=login-fix", "--no-focus"},
-		{"pane", "run", "w1:t1:p1", "claude", "--resume", "session-1", "--fork-session", "--add-dir", frontendWorktrees},
+		{"pane", "run", "w1:t1:p1", "'claude'", "'--resume'", "'session-1'", "'--fork-session'", "'--add-dir'", "'" + frontendWorktrees + "'"},
 	}
 	if len(fake.calls) != len(wantCalls) {
 		t.Fatalf("herdr calls %q, want %q", fake.calls, wantCalls)
@@ -458,6 +459,21 @@ func TestThreadCreateKeepsArgumentsWithSpacesWhole(t *testing.T) {
 	args := fake.runtimeArgs(t)
 	if !slices.Contains(args, filepath.Join(spaced, ".worktrees")) || args[len(args)-1] != "two words" {
 		t.Fatalf("arguments were split: %q", args)
+	}
+}
+
+func TestThreadCreateKeepsShellCharactersLiteral(t *testing.T) {
+	f := newFixture(t)
+	f.writeLocalConfig("runtimes:\n  codex:\n    thread:\n      default: [-c, 'permissions.x.unix_sockets={\"/tmp/a b.sock\"=\"allow\"}', '$HOME', \"it's\"]\n")
+	fake := f.useHerdr()
+	f.env["CODEX_SESSION_ID"] = "codex-session-9"
+	f.enterHerdr()
+
+	f.mustRun("thread", "create", "login-fix")
+
+	want := []string{"codex", "fork", "codex-session-9", "-c", `permissions.x.unix_sockets={"/tmp/a b.sock"="allow"}`, "$HOME", "it's"}
+	if got := fake.runtimeCommand(t); !slices.Equal(got, want) {
+		t.Fatalf("the shell got %q", got)
 	}
 }
 
