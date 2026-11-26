@@ -24,6 +24,7 @@ type App struct {
 	Getwd  func() (string, error)
 	Runner command.Runner
 	Now    func() time.Time
+	Sleep  func(time.Duration)
 }
 
 type handler func(ctx context.Context, app App, args []string) error

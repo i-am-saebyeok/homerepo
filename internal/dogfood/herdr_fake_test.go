@@ -90,7 +90,7 @@ func (h *fakeHerdr) handle(cmd command.Command) (command.Output, error) {
 	case "pane run":
 		if h.busyRuns > 0 {
 			h.busyRuns--
-			return command.Output{}, fail(cmd, "agent_pane_busy")
+			return command.Output{}, fail(cmd, "pane_send_failed")
 		}
 		h.paneRuns = append(h.paneRuns, cmd.Args[2:])
 		return reply(`{"result":{}}`)

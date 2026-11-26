@@ -5,12 +5,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
+	"time"
 
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 )
 
+const (
+	SendRetryLimit    = 10 * time.Second
+	SendRetryInterval = 500 * time.Millisecond
+)
+
+var notReadyForInput = []string{"agent_pane_busy", "pane_send_failed"}
+
 type Client struct {
 	Runner command.Runner
+	Sleep  func(time.Duration)
 }
 
 type Tab struct {
@@ -54,8 +64,22 @@ func (c Client) CreateTab(ctx context.Context, request TabRequest) (Tab, error) 
 }
 
 func (c Client) RunInPane(ctx context.Context, pane string, program string, args []string) error {
-	_, err := c.run(ctx, append([]string{"pane", "run", pane, program}, args...)...)
-	return err
+	request := append([]string{"pane", "run", pane, program}, args...)
+	for waited := time.Duration(0); ; waited += SendRetryInterval {
+		_, err := c.run(ctx, request...)
+		if !slices.Contains(notReadyForInput, ErrorCode(err)) || waited >= SendRetryLimit {
+			return err
+		}
+		c.sleep(SendRetryInterval)
+	}
+}
+
+func (c Client) sleep(duration time.Duration) {
+	if c.Sleep == nil {
+		time.Sleep(duration)
+		return
+	}
+	c.Sleep(duration)
 }
 
 func (c Client) TabExists(ctx context.Context, tabID string) (bool, error) {

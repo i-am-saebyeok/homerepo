@@ -138,7 +138,7 @@ func (app App) checkRequirements(chosen options) error {
 }
 
 func (app App) herdr() herdr.Client {
-	return herdr.Client{Runner: app.Runner}
+	return herdr.Client{Runner: app.Runner, Sleep: app.Sleep}
 }
 
 func (app App) remaining(deadline time.Time) time.Duration {

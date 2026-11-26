@@ -22,6 +22,7 @@ type fakeHerdr struct {
 	onTabCreate func()
 	onPaneRun   func()
 	onTabClose  func()
+	rejectRuns  int
 	splitTabs   map[string]bool
 }
 
@@ -64,6 +65,10 @@ func (h *fakeHerdr) handle(cmd command.Command) (command.Output, error) {
 		h.openTabs[tab] = true
 		return reply(`{"id":"cli:tab:create","result":{"tab":{"tab_id":"` + tab + `"},"root_pane":{"pane_id":"` + tab + `:p1"}}}`)
 	case "pane run":
+		if h.rejectRuns > 0 {
+			h.rejectRuns--
+			return command.Output{}, herdrError(cmd, "pane_send_failed")
+		}
 		if h.onPaneRun != nil {
 			h.onPaneRun()
 		}
@@ -558,4 +563,34 @@ func (h *fakeHerdr) paneList() string {
 	}
 	panes = append(panes, `{"pane_id":"`+callerPane+`","tab_id":"w1:t0","workspace_id":"w1"}`)
 	return `{"id":"cli:pane:list","result":{"panes":[` + strings.Join(panes, ",") + `]}}`
+}
+
+func TestThreadCreateSendsForkAgainUntilShellIsReady(t *testing.T) {
+	f := newFixture(t)
+	fake := f.useHerdr()
+	f.enterClaudeSession()
+	fake.rejectRuns = 3
+	got := f.mustRun("thread", "create", "login-fix")
+	if len(fake.callsOf("pane run")) != 4 || len(f.slept) != 3 || !strings.Contains(got.stdout, "created thread login-fix") {
+		t.Fatalf("pane runs %d, slept %v, stdout %q", len(fake.callsOf("pane run")), f.slept, got.stdout)
+	}
+}
+
+func TestThreadCreateStopsSendingWhenShellNeverAccepts(t *testing.T) {
+	f := newFixture(t)
+	fake := f.useHerdr()
+	f.enterClaudeSession()
+	fake.rejectRuns = 1000
+	got := f.run("thread", "create", "login-fix")
+	if got.code == 0 {
+		t.Fatal("expected failure")
+	}
+	for _, part := range []string{"tab w1:t1 was created but the session did not start", "pane_send_failed"} {
+		if !strings.Contains(got.stderr, part) {
+			t.Fatalf("missing %q in %q", part, got.stderr)
+		}
+	}
+	if !exists(f.recordPath("login-fix")) {
+		t.Fatal("record of the created tab is missing")
+	}
 }

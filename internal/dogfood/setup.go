@@ -19,7 +19,6 @@ import (
 const (
 	modulePath       = "github.com/i-am-saebyeok/homerepo"
 	coordinatorLabel = "dogfood-coordinator"
-	busyRetryDelay   = 500 * time.Millisecond
 )
 
 type runState struct {
@@ -154,17 +153,7 @@ func (s *session) startCoordinator(ctx context.Context) error {
 	if err := os.WriteFile(s.layout.State(), state, 0o644); err != nil {
 		return err
 	}
-	return s.runInPane(ctx, tab.Pane, string(s.options.runtime), s.sessionSetup().launchArgs())
-}
-
-func (s session) runInPane(ctx context.Context, pane string, program string, args []string) error {
-	for {
-		err := s.app.herdr().RunInPane(ctx, pane, program, args)
-		if herdr.ErrorCode(err) != "agent_pane_busy" || s.app.remaining(s.deadline) <= 0 {
-			return err
-		}
-		s.app.Sleep(busyRetryDelay)
-	}
+	return s.app.herdr().RunInPane(ctx, tab.Pane, string(s.options.runtime), s.sessionSetup().launchArgs())
 }
 
 func (s session) git(ctx context.Context, dir string, args ...string) (command.Output, error) {

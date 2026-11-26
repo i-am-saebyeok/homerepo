@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 	"github.com/i-am-saebyeok/homerepo/internal/command/commandtest"
@@ -55,5 +56,54 @@ func TestAgentReadsStatus(t *testing.T) {
 	status, err := clientReplying(`{"result":{"agent":{"agent_status":"blocked","pane_id":"w1:p2"}}}`, nil).Agent(context.Background(), "w1:p2")
 	if err != nil || status != herdr.AgentBlocked {
 		t.Fatalf("status %q, err %v", status, err)
+	}
+}
+
+func clientRejectingRuns(rejections int, code string) (herdr.Client, *[]time.Duration, *int) {
+	var slept []time.Duration
+	runs := 0
+	runner := &commandtest.Fake{Handlers: map[string]commandtest.Handler{
+		"herdr": func(cmd command.Command) (command.Output, error) {
+			runs++
+			if runs <= rejections {
+				return command.Output{}, commandtest.Fail(cmd, `{"error":{"code":"`+code+`","message":"wait for the shell prompt and retry"}}`)
+			}
+			return command.Output{Stdout: []byte(`{"result":{}}`)}, nil
+		},
+	}}
+	return herdr.Client{Runner: runner, Sleep: func(d time.Duration) { slept = append(slept, d) }}, &slept, &runs
+}
+
+func TestRunInPaneSendsAgainUntilAccepted(t *testing.T) {
+	for _, code := range []string{"agent_pane_busy", "pane_send_failed"} {
+		client, slept, runs := clientRejectingRuns(4, code)
+		if err := client.RunInPane(context.Background(), "w1:p1", "codex", []string{"--add-dir", "/a b"}); err != nil {
+			t.Fatalf("%s: %v", code, err)
+		}
+		if *runs != 5 || len(*slept) != 4 || (*slept)[0] != herdr.SendRetryInterval {
+			t.Fatalf("%s: runs %d, slept %v", code, *runs, *slept)
+		}
+	}
+}
+
+func TestRunInPaneGivesUpAfterLimit(t *testing.T) {
+	client, slept, _ := clientRejectingRuns(1000, "pane_send_failed")
+	err := client.RunInPane(context.Background(), "w1:p1", "codex", nil)
+	if herdr.ErrorCode(err) != "pane_send_failed" {
+		t.Fatalf("err %v", err)
+	}
+	var total time.Duration
+	for _, d := range *slept {
+		total += d
+	}
+	if total != herdr.SendRetryLimit {
+		t.Fatalf("waited %s", total)
+	}
+}
+
+func TestRunInPaneReturnsOtherErrorsAtOnce(t *testing.T) {
+	client, slept, runs := clientRejectingRuns(1000, "pane_not_found")
+	if err := client.RunInPane(context.Background(), "w1:p1", "codex", nil); herdr.ErrorCode(err) != "pane_not_found" || *runs != 1 || len(*slept) != 0 {
+		t.Fatalf("err %v, runs %d, slept %v", err, *runs, *slept)
 	}
 }

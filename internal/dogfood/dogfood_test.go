@@ -247,12 +247,22 @@ func TestMissingRequirementsCreateNothing(t *testing.T) {
 	}
 }
 
-func TestRetriesWhilePaneIsBusy(t *testing.T) {
+func TestCoordinatorIsSentAgainUntilShellIsReady(t *testing.T) {
 	w := newWorld(t)
 	w.herdr.busyRuns = 2
 	if got := w.runScenario(); got.code != 0 {
 		t.Fatalf("exit %d\n%s\n%s", got.code, got.stdout, got.stderr)
 	}
+}
+
+func TestCoordinatorThatNeverStartsIsReported(t *testing.T) {
+	w := newWorld(t)
+	w.herdr.busyRuns = 1000
+	got := w.runScenario()
+	if got.code == 0 {
+		t.Fatal("expected failure")
+	}
+	mustContain(t, got.stderr, "could not start the coordinator", "pane_send_failed")
 }
 
 func TestNoThreadPointsAtCoordinator(t *testing.T) {
