@@ -13,4 +13,4 @@
 ## 2. 실제로 돌려 보기
 
 - [x] 2.1 Claude Code로 `new-repository`를 돌린다(네 확인의 결과와 에이전트가 헤맨 곳을 기록한다)
-- [ ] 2.2 Codex로 `new-repository`를 돌린다(같은 것을 기록한다)
+- [x] 2.2 Codex로 `new-repository`를 돌린다(같은 것을 기록한다)

@@ -1,5 +1,9 @@
 # Spec Delta
 
+## Purpose
+
+실제 에이전트 런타임과 Herdr로 깨끗한 시험용 Home에서 사용자의 흐름을 처음부터 끝까지 되풀이해 돌리고, 도구의 동작으로 가를 수 있는 결과를 확인한다.
+
 ## ADDED Requirements
 
 ### Requirement: 시나리오 실행
