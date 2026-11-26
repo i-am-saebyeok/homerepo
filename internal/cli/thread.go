@@ -19,7 +19,7 @@ func (app App) threads() (thread.Threads, error) {
 	return thread.Threads{
 		Home:       loaded,
 		Workspaces: workspace.Workspaces{Home: loaded, Runner: app.Runner},
-		Herdr:      herdr.Client{Runner: app.Runner},
+		Herdr:      herdr.Client{Runner: app.Runner, Sleep: app.Sleep},
 		Records:    thread.Records{HomeRoot: loaded.Root},
 		Hooks:      thread.Hooks{HomeRoot: loaded.Root, Runner: app.Runner, Output: app.Stderr},
 		Now:        app.Now,

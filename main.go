@@ -17,6 +17,7 @@ func main() {
 		Getwd:  os.Getwd,
 		Runner: command.Exec{},
 		Now:    time.Now,
+		Sleep:  time.Sleep,
 	}
 	os.Exit(app.Run(context.Background(), os.Args[1:]))
 }
