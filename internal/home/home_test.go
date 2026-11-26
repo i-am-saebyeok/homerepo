@@ -249,3 +249,19 @@ func TestRuntimeAttachRejectsOtherValues(t *testing.T) {
 		t.Fatalf("error %v", err)
 	}
 }
+
+func TestInitSkillGuidesRegistrationAndWorktreePaths(t *testing.T) {
+	root := t.TempDir()
+	if _, err := home.Init(root); err != nil {
+		t.Fatal(err)
+	}
+	skill, err := os.ReadFile(filepath.Join(root, ".agents", "skills", "homerepo-thread", "SKILL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"homerepo repo add <name> --remote <address>", "worktree <repository> <path>", "calling it again prints the same path", "쓰레드 만들어", "make a thread"} {
+		if !strings.Contains(string(skill), expected) {
+			t.Fatalf("skill misses %q", expected)
+		}
+	}
+}

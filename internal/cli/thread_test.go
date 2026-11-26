@@ -326,8 +326,11 @@ func TestThreadCreateWithRepositoriesMakesWorktreesFirst(t *testing.T) {
 			t.Fatalf("%s worktrees folder not attached: %q", repository, args)
 		}
 	}
-	if got.stdout != "created thread login-fix in tab w1:t1\n" {
-		t.Fatalf("stdout:\n%s", got.stdout)
+	want := "created thread login-fix in tab w1:t1\n" +
+		"worktree frontend " + f.worktreePath("frontend", "login-fix") + "\n" +
+		"worktree backend " + f.worktreePath("backend", "login-fix") + "\n"
+	if got.stdout != want {
+		t.Fatalf("stdout:\n%s\nwant:\n%s", got.stdout, want)
 	}
 }
 
@@ -608,5 +611,22 @@ func TestThreadCreateStopsSendingWhenShellNeverAccepts(t *testing.T) {
 	}
 	if !exists(f.recordPath("login-fix")) {
 		t.Fatal("record of the created tab is missing")
+	}
+}
+
+func TestThreadCreatePrintsEachWorktree(t *testing.T) {
+	f := newFixture(t)
+	f.useHerdr()
+	f.enterClaudeSession()
+
+	got := f.mustRun("thread", "create", "login-fix", "--repo", "frontend")
+
+	lines := strings.Split(strings.TrimSuffix(got.stdout, "\n"), "\n")
+	if len(lines) != 2 || lines[0] != "created thread login-fix in tab w1:t1" || lines[1] != "worktree frontend "+f.worktreePath("frontend", "login-fix") {
+		t.Fatalf("stdout:\n%s", got.stdout)
+	}
+	again := f.mustRun("workspace", "create", "frontend", "--thread", "login-fix")
+	if again.stdout != f.worktreePath("frontend", "login-fix")+"\n" {
+		t.Fatalf("workspace create printed another path: %q", again.stdout)
 	}
 }

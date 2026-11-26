@@ -29,10 +29,10 @@ func (app App) threads() (thread.Threads, error) {
 func runThreadCreate(ctx context.Context, app App, args []string) error {
 	flags := newFlags("thread create")
 	var repositories repeated
-	flags.Var(&repositories, "repo", "repository to create a worktree in")
-	mode := flags.String("mode", "", "argument bundle")
-	runtimeName := flags.String("runtime", "", "runtime of the calling session")
-	session := flags.String("session", "", "session ID of the calling session")
+	flags.Var(&repositories, "repo", "create the thread's worktree of this `repository` before the fork starts; repeat for more")
+	mode := flags.String("mode", "", "add the argument `bundle` of this name from runtimes.<runtime>.thread in .homerepo/config.yaml (default: default)")
+	runtimeName := flags.String("runtime", "", "`runtime` of the calling session: claude or codex (default: read from the environment)")
+	session := flags.String("session", "", "`id` of the session to fork (default: read from the environment)")
 	positionals, err := parse(flags, args, 1)
 	if err != nil {
 		return err
@@ -45,11 +45,14 @@ func runThreadCreate(ctx context.Context, app App, args []string) error {
 	if err != nil {
 		return err
 	}
-	record, err := threads.Create(ctx, thread.CreateRequest{Name: positionals[0], Repositories: repositories, Mode: *mode, Caller: caller})
+	created, err := threads.Create(ctx, thread.CreateRequest{Name: positionals[0], Repositories: repositories, Mode: *mode, Caller: caller})
 	if err != nil {
 		return err
 	}
-	app.println("created thread", record.Name, "in tab", record.TabID)
+	app.println("created thread", created.Record.Name, "in tab", created.Record.TabID)
+	for _, worktree := range created.Worktrees {
+		app.println("worktree", worktree.Repository, worktree.Path)
+	}
 	return nil
 }
 

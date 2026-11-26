@@ -31,28 +31,41 @@ type CreateRequest struct {
 	Caller       Caller
 }
 
+type Created struct {
+	Record    Record
+	Worktrees []CreatedWorktree
+}
+
+type CreatedWorktree struct {
+	Repository string
+	Path       string
+}
+
 type Summary struct {
 	Record    Record
 	TabOpen   bool
 	Worktrees []workspace.Worktree
 }
 
-func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, error) {
+func (t Threads) Create(ctx context.Context, request CreateRequest) (Created, error) {
 	plan, err := t.checkCreate(request)
 	if err != nil {
-		return Record{}, err
+		return Created{}, err
 	}
 	values := hookValues{thread: request.Name, runtime: request.Caller.Runtime, attachDirs: t.attachDirs(request.Repositories)}
 	if err := t.Hooks.run(ctx, preCreateHook, values); err != nil {
-		return Record{}, err
+		return Created{}, err
 	}
+	var created Created
 	for _, repository := range request.Repositories {
-		if _, err := t.Workspaces.Create(ctx, repository, request.Name); err != nil {
-			return Record{}, err
+		path, err := t.Workspaces.Create(ctx, repository, request.Name)
+		if err != nil {
+			return created, err
 		}
+		created.Worktrees = append(created.Worktrees, CreatedWorktree{Repository: repository, Path: path})
 	}
 	if err := ensureIgnoredDirs(values.attachDirs); err != nil {
-		return Record{}, err
+		return created, err
 	}
 	tab, err := t.Herdr.CreateTab(ctx, herdr.TabRequest{
 		Workspace:   request.Caller.Workspace,
@@ -61,19 +74,19 @@ func (t Threads) Create(ctx context.Context, request CreateRequest) (Record, err
 		Environment: []string{EnvironmentVariable + "=" + request.Name},
 	})
 	if err != nil {
-		return Record{}, err
+		return created, err
 	}
-	record := Record{Name: request.Name, Runtime: request.Caller.Runtime, TabID: tab.ID, CreatedAt: t.Now().UTC()}
-	if err := t.Records.Write(record); err != nil {
-		return record, err
+	created.Record = Record{Name: request.Name, Runtime: request.Caller.Runtime, TabID: tab.ID, CreatedAt: t.Now().UTC()}
+	if err := t.Records.Write(created.Record); err != nil {
+		return created, err
 	}
 	if err := t.Herdr.RunInPane(ctx, tab.Pane, plan.adapter.program, plan.args(request.Caller.Session, values.attachDirs)); err != nil {
-		return record, fmt.Errorf("tab %s was created but the session did not start (close it with `homerepo thread close %s`): %w", tab.ID, request.Name, err)
+		return created, fmt.Errorf("tab %s was created but the session did not start (close it with `homerepo thread close %s`): %w", tab.ID, request.Name, err)
 	}
 	if err := t.Hooks.run(ctx, postCreateHook, values.inTab(tab.ID, tab.Pane)); err != nil {
-		return record, fmt.Errorf("thread %q was created in tab %s, but %w", request.Name, tab.ID, err)
+		return created, fmt.Errorf("thread %q was created in tab %s, but %w", request.Name, tab.ID, err)
 	}
-	return record, nil
+	return created, nil
 }
 
 func (t Threads) checkCreate(request CreateRequest) (launch, error) {
