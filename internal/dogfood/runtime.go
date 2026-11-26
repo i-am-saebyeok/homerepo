@@ -47,8 +47,12 @@ func (s sessionSetup) launchArgs() []string {
 }
 
 func (s sessionSetup) codexAccessArgs() []string {
-	quotedPath, _ := json.Marshal(s.pathWithBuiltHomerepo())
-	return []string{"--add-dir", s.layout.Root, "-c", "shell_environment_policy.set.PATH=" + string(quotedPath)}
+	return []string{"--add-dir", s.layout.Root, "-c", "shell_environment_policy.set.PATH=" + tomlString(s.pathWithBuiltHomerepo())}
+}
+
+func tomlString(value string) string {
+	quoted, _ := json.Marshal(value)
+	return string(quoted)
 }
 
 func (s sessionSetup) write() error {

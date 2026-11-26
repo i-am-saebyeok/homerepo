@@ -58,3 +58,8 @@ func (c Client) Prompt(ctx context.Context, request PromptRequest) error {
 	_, err := c.run(ctx, args...)
 	return err
 }
+
+func (c Client) ReadVisible(ctx context.Context, pane string, lines int) (string, error) {
+	output, err := c.run(ctx, "pane", "read", pane, "--source", "visible", "--lines", strconv.Itoa(lines))
+	return string(output.Stdout), err
+}

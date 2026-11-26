@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/i-am-saebyeok/homerepo/internal/herdr"
@@ -13,10 +14,17 @@ import (
 
 const (
 	pollInterval = 2 * time.Second
+	startupLimit = time.Minute
+	screenLines  = 15
 	startLine    = "Go ahead with the work this thread was created for."
 )
 
-var errTimedOut = errors.New("time limit reached")
+var (
+	errTimedOut     = errors.New("time limit reached")
+	errExited       = errors.New("the runtime exited and the pane is back at its shell")
+	errNeverStarted = fmt.Errorf("no runtime appeared in the pane within %s", startupLimit)
+	errWaiting      = errors.New("waiting for a confirmation")
+)
 
 type observation struct {
 	thread        thread.Record
@@ -31,12 +39,16 @@ func (o *observation) note(format string, values ...any) {
 }
 
 func (o *observation) stop(err error, format string, values ...any) {
+	o.stopShowing(err, "", format, values...)
+}
+
+func (o *observation) stopShowing(err error, screen string, format string, values ...any) {
 	if errors.Is(err, errTimedOut) || herdr.ErrorCode(err) == "timeout" {
 		o.timedOut = true
 		o.note("time limit reached: "+format, values...)
 		return
 	}
-	o.note(format+": %v", append(values, err)...)
+	o.note(format+": %v%s", append(values, err, screen)...)
 }
 
 func (s session) observe(ctx context.Context) observation {
@@ -44,11 +56,11 @@ func (s session) observe(ctx context.Context) observation {
 	pane := s.coordinator.Pane
 	status, err := s.waitForAgent(ctx, pane)
 	if err != nil {
-		seen.stop(err, "the coordinator in pane %s did not start", pane)
+		seen.stopShowing(err, s.screen(ctx, pane, err), "the coordinator in pane %s did not start", pane)
 		return seen
 	}
 	if status == herdr.AgentBlocked {
-		seen.note("the coordinator in pane %s is waiting for a confirmation; start %s once in %s yourself, answer the trust question, and run again", pane, s.options.runtime, s.layout.Home())
+		seen.note("the coordinator in pane %s is waiting for a confirmation before it got the scenario; if it is asking whether to trust %s, start %s there once yourself, answer the trust question, and run again%s", pane, s.layout.Home(), s.options.runtime, s.screen(ctx, pane, errWaiting))
 		return seen
 	}
 	instructions, err := s.options.scenario.Instructions(s.layout)
@@ -62,7 +74,7 @@ func (s session) observe(ctx context.Context) observation {
 	}
 	record, err := s.waitForThread(ctx)
 	if err != nil {
-		seen.stop(err, "no thread was created; see the coordinator in pane %s", pane)
+		seen.stopShowing(err, s.screen(ctx, pane, err), "no thread was created; see the coordinator in pane %s", pane)
 		return seen
 	}
 	seen.thread = record
@@ -72,6 +84,8 @@ func (s session) observe(ctx context.Context) observation {
 
 func (s session) waitForAgent(ctx context.Context, pane string) (herdr.AgentStatus, error) {
 	ready := []herdr.AgentStatus{herdr.AgentIdle, herdr.AgentDone, herdr.AgentBlocked}
+	launched := s.app.Now()
+	appeared := false
 	for {
 		status, err := s.app.herdr().Agent(ctx, pane)
 		if err != nil {
@@ -80,10 +94,27 @@ func (s session) waitForAgent(ctx context.Context, pane string) (herdr.AgentStat
 		if slices.Contains(ready, status) {
 			return status, nil
 		}
+		if err := startupFailure(status, appeared, s.app.Now().Sub(launched)); err != nil {
+			return status, err
+		}
+		appeared = appeared || status != herdr.AgentAbsent
 		if err := s.pause(); err != nil {
 			return status, err
 		}
 	}
+}
+
+func startupFailure(status herdr.AgentStatus, appeared bool, waited time.Duration) error {
+	if status != herdr.AgentAbsent {
+		return nil
+	}
+	if appeared {
+		return errExited
+	}
+	if waited >= startupLimit {
+		return errNeverStarted
+	}
+	return nil
 }
 
 func (s session) waitForThread(ctx context.Context) (thread.Record, error) {
@@ -99,13 +130,26 @@ func (s session) waitForThread(ctx context.Context) (thread.Record, error) {
 		if len(records) > 0 {
 			return records[0], nil
 		}
-		if status != herdr.AgentWorking {
-			return thread.Record{}, fmt.Errorf("the coordinator stopped as %q", statusLabel(status))
+		if err := stoppedWorking(status); err != nil {
+			return thread.Record{}, err
 		}
 		if err := s.pause(); err != nil {
 			return thread.Record{}, err
 		}
 	}
+}
+
+func stoppedWorking(status herdr.AgentStatus) error {
+	if status == herdr.AgentWorking {
+		return nil
+	}
+	if status == herdr.AgentAbsent {
+		return errExited
+	}
+	if status == herdr.AgentBlocked {
+		return errWaiting
+	}
+	return fmt.Errorf("the coordinator stopped as %q", status)
 }
 
 func (s session) startThread(ctx context.Context, seen *observation) {
@@ -117,16 +161,16 @@ func (s session) startThread(ctx context.Context, seen *observation) {
 	seen.threadPane = pane
 	status, err := s.waitForAgent(ctx, pane)
 	if err != nil {
-		seen.stop(err, "thread %q in pane %s did not start", seen.thread.Name, pane)
+		seen.stopShowing(err, s.screen(ctx, pane, err), "thread %q in pane %s did not start", seen.thread.Name, pane)
 		return
 	}
 	if status == herdr.AgentBlocked {
-		seen.note("thread %q in pane %s is waiting for a confirmation; no keys were sent", seen.thread.Name, pane)
+		seen.note("thread %q in pane %s is waiting for a confirmation; no keys were sent%s", seen.thread.Name, pane, s.screen(ctx, pane, errWaiting))
 		return
 	}
 	err = s.app.herdr().Prompt(ctx, herdr.PromptRequest{Pane: pane, Text: startLine, Until: []herdr.AgentStatus{herdr.AgentDone, herdr.AgentIdle, herdr.AgentBlocked}, Timeout: s.promptTimeout()})
 	if herdr.ErrorCode(err) == "agent_blocked" {
-		seen.note("thread %q in pane %s is waiting for a confirmation; no keys were sent", seen.thread.Name, pane)
+		seen.note("thread %q in pane %s is waiting for a confirmation; no keys were sent%s", seen.thread.Name, pane, s.screen(ctx, pane, errWaiting))
 		return
 	}
 	seen.threadStarted = true
@@ -140,8 +184,23 @@ func (s session) startThread(ctx context.Context, seen *observation) {
 		return
 	}
 	if status == herdr.AgentBlocked {
-		seen.note("thread %q in pane %s stopped to wait for a confirmation", seen.thread.Name, pane)
+		seen.note("thread %q in pane %s stopped to wait for a confirmation%s", seen.thread.Name, pane, s.screen(ctx, pane, errWaiting))
 	}
+}
+
+func (s session) screen(ctx context.Context, pane string, cause error) string {
+	if !errors.Is(cause, errWaiting) && !errors.Is(cause, errExited) && !errors.Is(cause, errNeverStarted) {
+		return ""
+	}
+	text, err := s.app.herdr().ReadVisible(ctx, pane, screenLines)
+	if err != nil {
+		return fmt.Sprintf("\n  (the screen could not be read: %v)", err)
+	}
+	lines := strings.Split(strings.TrimRight(text, " \n"), "\n")
+	if len(lines) > screenLines {
+		lines = lines[len(lines)-screenLines:]
+	}
+	return "\n  last lines of the screen:\n  | " + strings.Join(lines, "\n  | ")
 }
 
 func (s session) waitForPane(ctx context.Context, tabID string) (string, error) {
@@ -166,11 +225,4 @@ func (s session) pause() error {
 	}
 	s.app.Sleep(min(pollInterval, s.app.remaining(s.deadline)))
 	return nil
-}
-
-func statusLabel(status herdr.AgentStatus) string {
-	if status == herdr.AgentAbsent {
-		return "no agent"
-	}
-	return string(status)
 }

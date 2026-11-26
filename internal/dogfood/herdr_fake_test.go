@@ -8,6 +8,7 @@ import (
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 	"github.com/i-am-saebyeok/homerepo/internal/command/commandtest"
 	"github.com/i-am-saebyeok/homerepo/internal/herdr"
+	"github.com/i-am-saebyeok/homerepo/internal/herdr/herdrtest"
 )
 
 type prompt struct {
@@ -29,10 +30,11 @@ type fakeHerdr struct {
 	prompts         []prompt
 	keysSent        bool
 	handleTabCreate func(pane string)
+	screens         map[string]string
 }
 
 func newFakeHerdr(w *world) *fakeHerdr {
-	return &fakeHerdr{world: w, openTabs: map[string]string{}, statuses: map[string][]herdr.AgentStatus{}}
+	return &fakeHerdr{world: w, openTabs: map[string]string{}, statuses: map[string][]herdr.AgentStatus{}, screens: map[string]string{}}
 }
 
 func fail(cmd command.Command, code string) error {
@@ -92,7 +94,7 @@ func (h *fakeHerdr) handle(cmd command.Command) (command.Output, error) {
 			h.busyRuns--
 			return command.Output{}, fail(cmd, "pane_send_failed")
 		}
-		h.paneRuns = append(h.paneRuns, cmd.Args[2:])
+		h.paneRuns = append(h.paneRuns, append([]string{cmd.Args[2]}, herdrtest.ShellWords(h.world.t, cmd.Args[3:])...))
 		return reply(`{"result":{}}`)
 	case "pane list":
 		var panes []string
@@ -106,6 +108,8 @@ func (h *fakeHerdr) handle(cmd command.Command) (command.Output, error) {
 			return command.Output{}, fail(cmd, "agent_not_found")
 		}
 		return reply(`{"result":{"agent":{"agent_status":"` + string(status) + `"}}}`)
+	case "pane read":
+		return reply(h.screens[cmd.Args[2]])
 	case "agent prompt":
 		return h.prompt(cmd)
 	case "agent send-keys":
