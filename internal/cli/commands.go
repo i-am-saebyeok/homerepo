@@ -22,13 +22,7 @@ var commands = []commandSpec{
 	{name: "init", summary: "Create homerepo.yaml, .homerepo/ and the agent skill in the current folder. Existing files are kept.", run: runInit},
 	{name: "repo list", summary: "List the declared repositories, their remotes and clones.", run: runRepoList},
 	{name: "repo path", arguments: "<repository>", summary: "Print the path of a repository's clone.", run: runRepoPath},
-	{name: "repo add", arguments: "<name> --remote <address> [--branch <branch>]", summary: "Declare a repository in homerepo.yaml. It is not cloned until a worktree needs it.", run: runRepoAdd},
-	{name: "workspace create", arguments: "<repository> [--thread <name>]", summary: "Create the thread's worktree of a repository and print its path. If it exists, print the same path.", run: runWorkspaceCreate},
-	{name: "workspace list", summary: "List the worktrees of the declared repositories.", run: runWorkspaceList},
-	{name: "workspace release", arguments: "<repository> [--thread <name>]", summary: "Remove the thread's worktree of a repository if it has no uncommitted changes. The branch is kept.", run: runWorkspaceRelease},
-	{name: "thread create", arguments: "<name> [--repo <repository>]... [--mode <bundle>] [--runtime claude|codex] [--session <id>]", summary: "Fork the calling session into a new Herdr tab. Prints the tab, then one line per worktree made with --repo.", run: runThreadCreate},
-	{name: "thread list", summary: "List threads with their runtime, tab and worktrees.", run: runThreadList},
-	{name: "thread close", arguments: "<name>", summary: "Release the thread's worktrees and close its tab.", run: runThreadClose},
+	{name: "repo add", arguments: "<name> --remote <address> [--branch <branch>]", summary: "Declare a repository in homerepo.yaml. It is not cloned.", run: runRepoAdd},
 }
 
 func findCommand(name string) (commandSpec, bool) {

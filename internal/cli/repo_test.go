@@ -90,12 +90,12 @@ func TestInitInEmptyHome(t *testing.T) {
 	f := newFixture(t)
 	f.cwd = t.TempDir()
 	got := f.mustRun("init")
-	for _, expected := range []string{"created homerepo.yaml", "created .homerepo/", "created .agents/skills/homerepo-thread/SKILL.md"} {
+	for _, expected := range []string{"created homerepo.yaml", "created .homerepo/", "created .agents/skills/homerepo/SKILL.md"} {
 		if !strings.Contains(got.stdout, expected) {
 			t.Fatalf("output misses %q:\n%s", expected, got.stdout)
 		}
 	}
-	for _, path := range []string{"homerepo.yaml", ".homerepo/.gitignore", ".agents/skills/homerepo-thread/SKILL.md"} {
+	for _, path := range []string{"homerepo.yaml", ".homerepo/.gitignore", ".agents/skills/homerepo/SKILL.md"} {
 		if _, err := os.Stat(filepath.Join(f.cwd, path)); err != nil {
 			t.Fatalf("%s was not created: %v", path, err)
 		}
@@ -118,5 +118,19 @@ func TestInitAgainSkipsExistingDeclaration(t *testing.T) {
 	}
 	if string(after) != string(before) {
 		t.Fatal("homerepo.yaml changed")
+	}
+}
+
+func TestUnreadLocalConfigKeyStopsTheCommand(t *testing.T) {
+	f := newFixture(t)
+	f.writeLocalConfig("runtimes:\n  claude:\n    attach: false\n")
+	got := f.run("repo", "list")
+	if got.code == 0 || got.stdout != "" {
+		t.Fatalf("code %d, stdout %q", got.code, got.stdout)
+	}
+	for _, expected := range []string{filepath.Join(".homerepo", "config.yaml"), "runtimes"} {
+		if !strings.Contains(got.stderr, expected) {
+			t.Fatalf("stderr misses %q:\n%s", expected, got.stderr)
+		}
 	}
 }

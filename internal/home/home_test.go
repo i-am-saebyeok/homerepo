@@ -112,7 +112,7 @@ func TestEnsureIgnoredDirStaysOutOfGitStatus(t *testing.T) {
 	gittest.Isolate(t)
 	repository := filepath.Join(t.TempDir(), "repository")
 	gittest.Repository(t, repository)
-	ignored := filepath.Join(repository, home.WorktreesDir)
+	ignored := filepath.Join(repository, home.LocalDir)
 	created, err := home.EnsureIgnoredDir(ignored)
 	if err != nil || !created {
 		t.Fatalf("created=%v err=%v", created, err)
@@ -136,25 +136,25 @@ func TestInitCreatesSkeletonAndSkill(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"homerepo.yaml", ".homerepo/", ".agents/skills/homerepo-thread/SKILL.md", ".claude/skills/homerepo-thread"}
+	want := []string{"homerepo.yaml", ".homerepo/", ".agents/skills/homerepo/SKILL.md", ".claude/skills/homerepo"}
 	if strings.Join(result.Created, "|") != strings.Join(want, "|") {
 		t.Fatalf("created %v, want %v", result.Created, want)
 	}
 	if _, err := home.Load(root); err != nil {
 		t.Fatalf("skeleton does not load: %v", err)
 	}
-	target, err := os.Readlink(filepath.Join(root, ".claude", "skills", "homerepo-thread"))
+	target, err := os.Readlink(filepath.Join(root, ".claude", "skills", "homerepo"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if filepath.IsAbs(target) {
 		t.Fatalf("skill link is absolute: %s", target)
 	}
-	skill, err := os.ReadFile(filepath.Join(root, ".claude", "skills", "homerepo-thread", "SKILL.md"))
+	skill, err := os.ReadFile(filepath.Join(root, ".claude", "skills", "homerepo", "SKILL.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"name: homerepo-thread", "author: homerepo", "Do code work in a worktree."} {
+	for _, expected := range []string{"name: homerepo\n", "author: homerepo"} {
 		if !strings.Contains(string(skill), expected) {
 			t.Fatalf("skill misses %q", expected)
 		}
@@ -205,7 +205,7 @@ func TestInitDoesNotLinkWhenClaudeSkillsIsTheSameFolder(t *testing.T) {
 			t.Fatalf("created a link inside the shared folder: %s", path)
 		}
 	}
-	info, err := os.Lstat(filepath.Join(root, ".agents", "skills", "homerepo-thread"))
+	info, err := os.Lstat(filepath.Join(root, ".agents", "skills", "homerepo"))
 	if err != nil || !info.IsDir() {
 		t.Fatalf("skill folder is not a real folder: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestInitLocalFolderStaysOutOfGitStatus(t *testing.T) {
 	if _, err := home.Init(root); err != nil {
 		t.Fatal(err)
 	}
-	gittest.WriteFile(t, filepath.Join(root, home.LocalDir, "threads", "a.json"), "{}\n")
+	gittest.WriteFile(t, filepath.Join(root, home.LocalDir, home.LocalConfigFile), "repositories:\n  overrides: {}\n")
 	status := gittest.Git(t, root, "status", "--porcelain", "--untracked-files=all")
 	if strings.Contains(status, home.LocalDir) {
 		t.Fatalf("local folder shows in git status:\n%s", status)
@@ -228,40 +228,48 @@ func TestInitLocalFolderStaysOutOfGitStatus(t *testing.T) {
 	}
 }
 
-func TestRuntimeAttachDistinguishesUnsetFromFalse(t *testing.T) {
-	root := newHome(t, declared)
-	gittest.WriteFile(t, filepath.Join(root, home.LocalDir, home.LocalConfigFile), "runtimes:\n  claude:\n    attach: false\n  codex:\n    attach: True\n  other:\n    thread:\n      default: []\n")
-	loaded, err := home.Load(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	runtimes := loaded.Local.Runtimes
-	if runtimes["claude"].AttachesWorktrees() || !runtimes["codex"].AttachesWorktrees() || !runtimes["other"].AttachesWorktrees() || !runtimes["missing"].AttachesWorktrees() {
-		t.Fatalf("attach values %+v", runtimes)
-	}
-}
-
-func TestRuntimeAttachRejectsOtherValues(t *testing.T) {
-	root := newHome(t, declared)
-	gittest.WriteFile(t, filepath.Join(root, home.LocalDir, home.LocalConfigFile), "runtimes:\n  claude:\n    attach: yes\n")
-	_, err := home.Load(root)
-	if err == nil || !strings.Contains(err.Error(), `line 3: expected true or false, got "yes"`) {
-		t.Fatalf("error %v", err)
-	}
-}
-
-func TestInitSkillGuidesRegistrationAndWorktreePaths(t *testing.T) {
+func TestInitSkillGuidesOnlyRepositoryCommands(t *testing.T) {
 	root := t.TempDir()
 	if _, err := home.Init(root); err != nil {
 		t.Fatal(err)
 	}
-	skill, err := os.ReadFile(filepath.Join(root, ".agents", "skills", "homerepo-thread", "SKILL.md"))
+	skill, err := os.ReadFile(filepath.Join(root, ".agents", "skills", "homerepo", "SKILL.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"homerepo repo add <name> --remote <address>", "worktree <repository> <path>", "calling it again prints the same path", "쓰레드 만들어", "make a thread"} {
+	for _, expected := range []string{"homerepo repo add <name> --remote <address>", "homerepo repo list", "homerepo repo path <repository>", "저장소 등록해줘", "declare a repository"} {
 		if !strings.Contains(string(skill), expected) {
 			t.Fatalf("skill misses %q", expected)
 		}
+	}
+	for _, removed := range []string{"homerepo thread", "homerepo workspace", "worktree"} {
+		if strings.Contains(string(skill), removed) {
+			t.Fatalf("skill still mentions %q", removed)
+		}
+	}
+}
+
+func TestInitLeavesTheOldSkillInPlace(t *testing.T) {
+	root := t.TempDir()
+	old := filepath.Join(root, ".agents", "skills", "homerepo-thread", "SKILL.md")
+	gittest.WriteFile(t, old, "edited by a person\n")
+	if _, err := home.Init(root); err != nil {
+		t.Fatal(err)
+	}
+	content, err := os.ReadFile(old)
+	if err != nil || string(content) != "edited by a person\n" {
+		t.Fatalf("the old skill changed: %q, %v", content, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".agents", "skills", "homerepo", "SKILL.md")); err != nil {
+		t.Fatalf("the new skill was not created: %v", err)
+	}
+}
+
+func TestLoadRejectsLocalConfigKeysItDoesNotRead(t *testing.T) {
+	root := newHome(t, declared)
+	gittest.WriteFile(t, filepath.Join(root, home.LocalDir, home.LocalConfigFile), "runtimes:\n  claude:\n    attach: false\n")
+	_, err := home.Load(root)
+	if err == nil || !strings.Contains(err.Error(), "runtimes") || !strings.Contains(err.Error(), home.LocalConfigFile) {
+		t.Fatalf("error %v", err)
 	}
 }

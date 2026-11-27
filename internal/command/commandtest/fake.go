@@ -26,7 +26,3 @@ func (f *Fake) Run(ctx context.Context, cmd command.Command) (command.Output, er
 	}
 	return f.Fallback.Run(ctx, cmd)
 }
-
-func Fail(cmd command.Command, stderr string) error {
-	return &command.Failure{Command: cmd, ExitCode: 1, Stderr: stderr}
-}

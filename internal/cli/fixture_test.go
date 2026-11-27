@@ -5,7 +5,6 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/i-am-saebyeok/homerepo/internal/cli"
 	"github.com/i-am-saebyeok/homerepo/internal/command"
@@ -18,10 +17,8 @@ type fixture struct {
 	root    string
 	home    string
 	cwd     string
-	env     map[string]string
 	runner  *commandtest.Fake
 	remotes map[string]string
-	slept   []time.Duration
 }
 
 type result struct {
@@ -38,7 +35,6 @@ func newFixture(t *testing.T) *fixture {
 		t:       t,
 		root:    root,
 		home:    filepath.Join(root, "home"),
-		env:     map[string]string{},
 		runner:  &commandtest.Fake{Handlers: map[string]commandtest.Handler{}, Fallback: command.Exec{}},
 		remotes: map[string]string{},
 	}
@@ -58,11 +54,8 @@ func (f *fixture) run(args ...string) result {
 	app := cli.App{
 		Stdout: &stdout,
 		Stderr: &stderr,
-		Getenv: func(key string) string { return f.env[key] },
 		Getwd:  func() (string, error) { return f.cwd, nil },
 		Runner: f.runner,
-		Now:    func() time.Time { return time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC) },
-		Sleep:  func(d time.Duration) { f.slept = append(f.slept, d) },
 	}
 	code := app.Run(context.Background(), args)
 	return result{stdout: stdout.String(), stderr: stderr.String(), code: code}
