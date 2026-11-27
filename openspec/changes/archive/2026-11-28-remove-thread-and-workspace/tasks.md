@@ -20,4 +20,4 @@
 
 ## 4. 보관
 
-- [ ] 4.1 변경을 보관한 뒤 `openspec/specs`의 `thread`, `workspace`, `dogfood` 폴더를 지우고 `openspec validate --all --strict`가 통과하는지 확인한다
+- [x] 4.1 `thread`와 `dogfood` 사양의 표를 지우고 `retire_capabilities: true`로 변경을 보관해, `openspec/specs`에 `cli`와 `repository`만 남고 `openspec validate --all --strict`가 통과하는지 확인한다

@@ -30,9 +30,9 @@
 
 `init`은 이미 있는 파일을 덮어쓰지 않는다는 규칙을 지킨다. `homerepo-thread`가 설치된 Home에서 `init`을 다시 실행하면 `homerepo` 스킬이 새로 생기고 옛 스킬은 남는다. 옛 스킬을 지우는 일은 사람이 한다. `init`이 파일을 지우기 시작하면 사람이 고친 스킬을 잃을 수 있다.
 
-### 요구사항이 모두 없어진 사양은 보관한 뒤 폴더를 지운다
+### 요구사항이 모두 없어진 사양은 보관할 때 함께 지운다
 
-`thread`, `workspace`, `dogfood`는 요구사항이 하나도 남지 않는다. 변경을 보관한 뒤 세 사양 폴더를 지우고 `openspec validate --all --strict`로 확인한다.
+`thread`, `workspace`, `dogfood`는 요구사항이 하나도 남지 않는다. 변경의 `.openspec.yaml`에 `retire_capabilities: true`를 두어 보관이 세 사양을 지우게 한다. 요구사항 안의 표는 보관이 지워도 되는 내용으로 세지 못하므로, 보관하기 전에 `thread`와 `dogfood` 사양에서 표를 손으로 지운다.
 
 ### 쓰이지 않게 되는 것은 함께 지운다
 
