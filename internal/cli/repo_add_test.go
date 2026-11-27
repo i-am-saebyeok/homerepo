@@ -59,7 +59,7 @@ func TestRepoAddAppendsRepository(t *testing.T) {
 	if !strings.Contains(list.stdout, "notes") || !strings.Contains(list.stdout, "https://example.com/notes.git") {
 		t.Fatalf("repo list:\n%s", list.stdout)
 	}
-	if exists(f.clonePath("notes")) {
+	if _, err := os.Lstat(f.clonePath("notes")); err == nil {
 		t.Fatal("the repository was cloned")
 	}
 }

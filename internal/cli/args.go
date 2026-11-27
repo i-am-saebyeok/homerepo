@@ -5,19 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strings"
 )
-
-type repeated []string
-
-func (r *repeated) String() string {
-	return strings.Join(*r, ",")
-}
-
-func (r *repeated) Set(value string) error {
-	*r = append(*r, value)
-	return nil
-}
 
 type usageError struct {
 	message string

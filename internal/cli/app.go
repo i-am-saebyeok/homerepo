@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/i-am-saebyeok/homerepo/internal/command"
 )
@@ -20,11 +19,8 @@ const (
 type App struct {
 	Stdout io.Writer
 	Stderr io.Writer
-	Getenv func(string) string
 	Getwd  func() (string, error)
 	Runner command.Runner
-	Now    func() time.Time
-	Sleep  func(time.Duration)
 }
 
 func (app App) Run(ctx context.Context, args []string) int {

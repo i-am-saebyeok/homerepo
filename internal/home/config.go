@@ -25,42 +25,11 @@ type declaration struct {
 }
 
 type LocalConfig struct {
-	Repositories RepositoryOverrides      `yaml:"repositories"`
-	Runtimes     map[string]RuntimeConfig `yaml:"runtimes"`
+	Repositories RepositoryOverrides `yaml:"repositories"`
 }
 
 type RepositoryOverrides struct {
 	Overrides map[string]string `yaml:"overrides"`
-}
-
-type RuntimeConfig struct {
-	Thread map[string][]string `yaml:"thread"`
-	Attach *Switch             `yaml:"attach"`
-}
-
-func (c RuntimeConfig) AttachesWorktrees() bool {
-	return c.Attach == nil || bool(*c.Attach)
-}
-
-type Switch bool
-
-func (s *Switch) UnmarshalYAML(node *yaml.Node) error {
-	if node.Kind != yaml.ScalarNode || node.ShortTag() != "!!bool" {
-		return fmt.Errorf("line %d: expected true or false, got %s", node.Line, describeNode(node))
-	}
-	var value bool
-	if err := node.Decode(&value); err != nil {
-		return err
-	}
-	*s = Switch(value)
-	return nil
-}
-
-func describeNode(node *yaml.Node) string {
-	if node.Kind == yaml.ScalarNode {
-		return fmt.Sprintf("%q", node.Value)
-	}
-	return "a list or a map"
 }
 
 var repositoryName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
