@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	skillName           = "homerepo-thread"
+	skillName           = "homerepo"
 	agentsSkillsDir     = ".agents/skills"
 	claudeSkillsDir     = ".claude/skills"
 	declarationSkeleton = "repositories: []\n"

@@ -13,7 +13,6 @@ import (
 const (
 	LocalDir        = ".homerepo"
 	LocalConfigFile = "config.yaml"
-	WorktreesDir    = ".worktrees"
 )
 
 type Home struct {
@@ -51,10 +50,6 @@ func (h Home) ClonePath(name string) string {
 		return filepath.Clean(override)
 	}
 	return filepath.Join(filepath.Dir(h.Root), name)
-}
-
-func (h Home) WorktreesPath(name string) string {
-	return filepath.Join(h.ClonePath(name), WorktreesDir)
 }
 
 func (h Home) declaredNames() string {

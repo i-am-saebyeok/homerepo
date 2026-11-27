@@ -34,11 +34,11 @@ func TestExecReportsFailureWithStderr(t *testing.T) {
 
 func TestFakeRoutesByProgramName(t *testing.T) {
 	fake := &commandtest.Fake{Handlers: map[string]commandtest.Handler{
-		"herdr": func(cmd command.Command) (command.Output, error) {
+		"gh": func(cmd command.Command) (command.Output, error) {
 			return command.Output{Stdout: []byte("ok")}, nil
 		},
 	}}
-	output, err := fake.Run(context.Background(), command.Command{Name: "herdr", Args: []string{"tab", "list"}})
+	output, err := fake.Run(context.Background(), command.Command{Name: "gh", Args: []string{"repo", "list"}})
 	if err != nil || string(output.Stdout) != "ok" {
 		t.Fatalf("unexpected result %q, %v", output.Stdout, err)
 	}
